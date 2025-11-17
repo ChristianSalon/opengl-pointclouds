@@ -3,30 +3,33 @@
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <happly.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+#include "perspective_camera.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
 
-constexpr float MOVE_SPEED = 0.1;
-
-void errorCallback(int error, const char* description) {
-    std::cerr << "GLFW error: " << description << std::endl;
-}
-
-void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
-
-static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    }
-}
+constexpr float MOVE_SPEED = 0.001f;
+constexpr float ROTATE_SPEED = 0.5f;
 
 int main() {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
+
+    // Camera
+    struct WindowData {
+        PerspectiveCamera *camera = nullptr;
+        bool leftMousePressed = false;
+        bool rightMousePressed = false;
+    };
+
+    PerspectiveCamera camera =
+        PerspectiveCamera{glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f};
+
+    WindowData windowData{};
+    windowData.camera = &camera;
 
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
@@ -36,7 +39,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-    GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "opengl-pointclouds", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "opengl-pointclouds", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -44,55 +47,98 @@ int main() {
         return -1;
     }
 
+    glfwSetWindowUserPointer(window, &windowData);
     glfwMakeContextCurrent(window);
-    glfwSetErrorCallback(errorCallback);
-    glfwSetKeyCallback(window, keyCallback);
+    glfwSetErrorCallback(
+        [](int error, const char *description) -> void { std::cerr << "GLFW error: " << description << std::endl; });
+    glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) -> void {
+        WindowData *windowData = static_cast<WindowData *>(glfwGetWindowUserPointer(window));
+        if (!windowData) {
+            return;
+        }
 
-    if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            windowData->leftMousePressed = action == GLFW_PRESS;
+        }
+
+        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            windowData->rightMousePressed = action == GLFW_PRESS;
+        }
+    });
+    glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) -> void {
+        static double lastX = xpos, lastY = ypos;
+        static bool firstMouse = true;
+
+        WindowData *windowData = static_cast<WindowData *>(glfwGetWindowUserPointer(window));
+        if (!windowData) {
+            return;
+        }
+
+        if (firstMouse) {
+            firstMouse = false;
+            return;
+        }
+
+        float xRel = xpos - lastX;
+        float yRel = ypos - lastY;
+        lastX = xpos;
+        lastY = ypos;
+
+        if (windowData->leftMousePressed) {
+            windowData->camera->translate(glm::vec3(xRel * MOVE_SPEED, yRel * MOVE_SPEED, 0.f));
+            windowData->camera->translate(glm::vec3(-xRel * MOVE_SPEED, yRel * MOVE_SPEED, 0.f));
+        }
+
+        if (windowData->rightMousePressed) {
+            glm::vec3 rot(0.0f);
+            rot.y += xRel * ROTATE_SPEED;
+            rot.x += yRel * ROTATE_SPEED;
+
+            windowData->camera->rotate(rot);
+        }
+    });
+    glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
+        WindowData *windowData = static_cast<WindowData *>(glfwGetWindowUserPointer(window));
+        if (!windowData) {
+            return;
+        }
+
+        windowData->camera->zoom(-yoffset);
+        windowData->camera->zoom(yoffset);
+    });
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+    glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height) -> void {
+        WindowData *windowData = static_cast<WindowData *>(glfwGetWindowUserPointer(window));
+        if (!windowData) {
+            return;
+        }
+
+        // windowData->camera->setProjection();
+        glViewport(0, 0, width, height);
+    });
 
     // Create shaders and shader programs
     auto const vsSrc = R".(
         #version 450
 
+        layout(location = 0) in vec3 inPos;
+
         layout(location = 0) out vec4 outColor;
 
-        uniform float angle;
         uniform mat4 view;
         uniform mat4 proj;
 
-        vec2 positions[] = {
-            vec2(-0.5, -0.5), 
-            vec2(0.5, -0.5), 
-            vec2(-0.5, 0.5)
-        };
-
-        vec4 colors[] = {
-            vec4(1.f, 0.f, 0.f, 1.f), 
-            vec4(0.f, 1.f, 0.f, 1.f), 
-            vec4(0.f, 0.f, 1.f, 1.f)
-        };
-
         void main() {
-            vec4 vertex = vec4(positions[gl_VertexID], 0.f, 1.f);
+            vec4 vertex = vec4(inPos, 1.f);       
 
-            float cosAngle = cos(angle);
-            float sinAngle = sin(angle);
-
-            mat4 rotY = mat4(
-                cosAngle,  0.f, sinAngle, 0.f, 
-                0.f, 1.f, 0.f, 0.f, 
-               -sinAngle, 0.f, cosAngle, 0.f, 
-                0.f, 0.f, 0.f, 1.f
-            );            
-
-            gl_Position = proj * view * rotY * vertex;
-            outColor = colors[gl_VertexID];
+            gl_Position = proj * view * vertex;
+            outColor = vec4(0.f, 0.f, 1.f, 1.f);
         }
     ).";
 
@@ -124,14 +170,29 @@ int main() {
 
     glLinkProgram(program);
 
-    GLfloat angle = 0.f;
-    glm::mat4 projMatrix = glm::perspective(glm::radians(60.f), WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 100.f);
-    glm::mat4 viewMatrix = glm::lookAt(glm::vec3(0.f, 0.f, 5.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-
     GLint angleLocation = glGetUniformLocation(program, "angle");
     GLint viewLocation = glGetUniformLocation(program, "view");
     GLint projLocation = glGetUniformLocation(program, "proj");
 
+    // Load ply file
+    happly::PLYData pointCloud("C:\\Users\\chsal\\Documents\\vut-fit\\pgr\\opengl-terrain\\resources\\bunny.ply");
+    std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
+
+    // Create vertex buffer
+    GLuint vao, vbo;
+
+    glCreateVertexArrays(1, &vao);
+    glCreateBuffers(1, &vbo);
+
+    glNamedBufferStorage(vbo, vPos.size() * sizeof(double) * 3, vPos.data(), 0);
+
+    glEnableVertexArrayAttrib(vao, 0);
+    glVertexArrayAttribFormat(vao, 0, 3, GL_DOUBLE, GL_FALSE, 0);
+    glVertexArrayAttribBinding(vao, 0, 0);
+
+    glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(double) * 3);
+
+    // Main loop
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.1f, 0.1f, 0.1f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -139,18 +200,18 @@ int main() {
         // Draw
         glUseProgram(program);
 
-        glUniform1f(angleLocation, angle);
-        glProgramUniformMatrix4fv(program, viewLocation, 1, GL_FALSE, (float*) &viewMatrix);
-        glProgramUniformMatrix4fv(program, projLocation, 1, GL_FALSE, (float*) &projMatrix);
+        glm::mat4 viewMatrix = windowData.camera->viewMatrix();
+        glm::mat4 projectionMatrix = windowData.camera->projectionMatrix();
+        glProgramUniformMatrix4fv(program, viewLocation, 1, GL_FALSE, (float *)&viewMatrix);
+        glProgramUniformMatrix4fv(program, projLocation, 1, GL_FALSE, (float *)&projectionMatrix);
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-
-        angle += 1.f / 10'000.f;
+        glBindVertexArray(vao);
+        glDrawArrays(GL_POINTS, 0, vPos.size());
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-    
+
     glDeleteProgram(program);
     glDeleteShader(vs);
     glDeleteShader(fs);
