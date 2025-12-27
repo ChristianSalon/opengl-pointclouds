@@ -1,7 +1,5 @@
 #pragma once
 
-#include <filesystem>
-
 #include "path_utils.h"
 #include "renderer.h"
 

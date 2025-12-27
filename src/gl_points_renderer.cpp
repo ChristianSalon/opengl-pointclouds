@@ -1,7 +1,6 @@
 #include "gl_points_renderer.h"
 
 void GlPointsRenderer::initialize() {
-    // Create vertex and fragment shaders
     mVs = createShader(VS_PATH, GL_VERTEX_SHADER);
     mFs = createShader(FS_PATH, GL_FRAGMENT_SHADER);
 
@@ -12,7 +11,6 @@ void GlPointsRenderer::initialize() {
 
     glLinkProgram(mProgram);
 
-    // Create vertex buffer
     mViewLocation = glGetUniformLocation(mProgram, "view");
     mProjLocation = glGetUniformLocation(mProgram, "proj");
 

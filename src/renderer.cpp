@@ -26,3 +26,8 @@ GLuint Renderer::createShader(std::filesystem::path path, GLenum type) {
 
     return shader;
 }
+
+void Renderer::setWindowDimensions(int width, int height) {
+    mWindowWidth = width;
+    mWindowHeight = height;
+}

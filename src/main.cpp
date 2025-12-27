@@ -17,6 +17,7 @@
 #include "perspective_camera.h"
 #include "renderer.h"
 #include "gl_points_renderer.h"
+#include "basic_compute_renderer.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
@@ -55,6 +56,8 @@ int main(int argc, char **argv) {
         std::shared_ptr<BaseCamera> camera = nullptr;
         bool leftMousePressed = false;
         bool rightMousePressed = false;
+        int width = WINDOW_WIDTH;
+        int height = WINDOW_HEIGHT;
     };
 
     std::shared_ptr<BaseCamera> camera = std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
@@ -160,7 +163,9 @@ int main(int argc, char **argv) {
             return;
         }
 
-        // windowData->camera->setProjection();
+        windowData->width = width;
+        windowData->height = height;
+
         glViewport(0, 0, width, height);
     });
 
@@ -174,7 +179,8 @@ int main(int argc, char **argv) {
     }
 
     // Create renderer
-    std::unique_ptr<Renderer> renderer = std::make_unique<GlPointsRenderer>(vertexPositions, camera);
+    std::unique_ptr<Renderer> renderer = std::make_unique<BasicComputeRenderer>(vertexPositions, camera);
+    renderer->setWindowDimensions(windowData.width, windowData.height);
     renderer->initialize();
 
     // Initialize imgui

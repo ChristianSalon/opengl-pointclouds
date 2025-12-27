@@ -18,6 +18,7 @@ set(SOURCES
     ${SRC_PATH}/perspective_camera.cpp
     ${SRC_PATH}/renderer.cpp
     ${SRC_PATH}/gl_points_renderer.cpp
+    ${SRC_PATH}/basic_compute_renderer.cpp
 )
 
 # executable header files
@@ -27,12 +28,17 @@ set(HEADERS
     ${INCLUDES_PATH}/perspective_camera.h
     ${INCLUDES_PATH}/renderer.h
     ${INCLUDES_PATH}/gl_points_renderer.h
+    ${INCLUDES_PATH}/basic_compute_renderer.h
 )
 
 # executable glsl shaders
 set(SHADERS
     ${SHADERS_PATH}/gl_points.vert
     ${SHADERS_PATH}/gl_points.frag
+    ${SHADERS_PATH}/basic_compute_render.comp
+    ${SHADERS_PATH}/basic_compute_resolve.comp
+    ${SHADERS_PATH}/basic_compute_quad.vert
+    ${SHADERS_PATH}/basic_compute_quad.frag
 )
 
 # imgui source files
@@ -78,10 +84,19 @@ target_include_directories(${EXECUTABLE_NAME} PRIVATE ${INCLUDES_PATH})
 target_link_libraries(${EXECUTABLE_NAME} PRIVATE glad glfw imgui glm::glm opengl32 gdi32 user32 shell32 kernel32)
 
 # copy resources to executable directory
+message(STATUS "Copying resources to build directory")
 add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/resources"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/shaders"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/resources/bunny.ply" "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/resources"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/shaders/gl_points.vert" "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/shaders"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/shaders/gl_points.frag" "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/shaders"
 )
+
+# copy shaders to executable directory
+foreach(SHADER_FILE ${SHADERS})
+    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
+
+    message(STATUS "Copying shader ${SHADER_NAME} to build directory")
+    add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/shaders"
+        COMMAND ${CMAKE_COMMAND} -E copy "${SHADER_FILE}" "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/shaders"
+    )
+endforeach()
