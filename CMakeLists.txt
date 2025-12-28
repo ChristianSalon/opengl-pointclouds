@@ -19,6 +19,7 @@ set(SOURCES
     ${SRC_PATH}/renderer.cpp
     ${SRC_PATH}/gl_points_renderer.cpp
     ${SRC_PATH}/basic_compute_renderer.cpp
+    ${SRC_PATH}/high_quality_renderer.cpp
 )
 
 # executable header files
@@ -29,6 +30,7 @@ set(HEADERS
     ${INCLUDES_PATH}/renderer.h
     ${INCLUDES_PATH}/gl_points_renderer.h
     ${INCLUDES_PATH}/basic_compute_renderer.h
+    ${INCLUDES_PATH}/high_quality_renderer.h
 )
 
 # executable glsl shaders
@@ -39,6 +41,11 @@ set(SHADERS
     ${SHADERS_PATH}/basic_compute_resolve.comp
     ${SHADERS_PATH}/basic_compute_quad.vert
     ${SHADERS_PATH}/basic_compute_quad.frag
+    ${SHADERS_PATH}/high_quality_depth.comp
+    ${SHADERS_PATH}/high_quality_color.comp
+    ${SHADERS_PATH}/high_quality_resolve.comp
+    ${SHADERS_PATH}/high_quality_quad.vert
+    ${SHADERS_PATH}/high_quality_quad.frag
 )
 
 # imgui source files

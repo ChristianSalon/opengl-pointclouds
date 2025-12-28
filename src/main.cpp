@@ -18,6 +18,7 @@
 #include "renderer.h"
 #include "gl_points_renderer.h"
 #include "basic_compute_renderer.h"
+#include "high_quality_renderer.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
@@ -179,7 +180,7 @@ int main(int argc, char **argv) {
     }
 
     // Create renderer
-    std::unique_ptr<Renderer> renderer = std::make_unique<BasicComputeRenderer>(vertexPositions, camera);
+    std::unique_ptr<Renderer> renderer = std::make_unique<HighQualityRenderer>(vertexPositions, camera);
     renderer->setWindowDimensions(windowData.width, windowData.height);
     renderer->initialize();
 
@@ -193,7 +194,7 @@ int main(int argc, char **argv) {
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 450");
+    ImGui_ImplOpenGL3_Init("#version 460");
 
     int algorithm = 0;
 
