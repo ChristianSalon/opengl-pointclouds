@@ -11,15 +11,16 @@ public:
 protected:
     GLuint mProgram;
     GLuint mVs, mFs;
-    GLuint mVao, mVbo;
+    GLuint mVao, mPositionVbo, mColorVbo;
 
     GLint mViewLocation;
     GLint mProjLocation;
-    GLint mColorLocation;
+    GLint mUseDefaultColorLocation;
+    GLint mDefaultColorLocation;
     GLint mPointSizeLocation;
 
 public:
-    GlPointsRenderer(std::shared_ptr<BaseCamera> camera) : Renderer{camera} {}
+    GlPointsRenderer(std::shared_ptr<BaseCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~GlPointsRenderer() {}
 
     virtual void initialize() override;

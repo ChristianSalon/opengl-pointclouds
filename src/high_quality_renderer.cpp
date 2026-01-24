@@ -40,7 +40,8 @@ void HighQualityRenderer::initialize() {
     mDepthProgramMvpLocation = glGetUniformLocation(mDepthProgram, "mvp");
     mDepthProgramFramebufferSizeLocation = glGetUniformLocation(mDepthProgram, "framebufferSize");
 
-    mColorProgramColorLocation = glGetUniformLocation(mColorProgram, "color");
+    mColorProgramUseDefaultColorLocation = glGetUniformLocation(mColorProgram, "useDefaultColor");
+    mColorProgramDefaultColorLocation = glGetUniformLocation(mColorProgram, "defaultColor");
     mColorProgramMvpLocation = glGetUniformLocation(mColorProgram, "mvp");
     mColorProgramFramebufferSizeLocation = glGetUniformLocation(mColorProgram, "framebufferSize");
 
@@ -62,28 +63,17 @@ void HighQualityRenderer::initialize() {
 
     glCreateBuffers(1, &mPointsSsbo);
     glNamedBufferStorage(mPointsSsbo, mVertexPositions.size() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
-    std::vector<glm::vec4> packed;
-    for (const glm::vec3 &vertex : mVertexPositions) {
-        packed.push_back(glm::vec4(vertex, 1.f));
-    }
-    glNamedBufferSubData(mPointsSsbo, 0, packed.size() * sizeof(glm::vec4), packed.data());
+    glNamedBufferSubData(mPointsSsbo, 0, mVertexPositions.size() * sizeof(glm::vec4), mVertexPositions.data());
+
+    glCreateBuffers(1, &mColorSsbo);
+    glNamedBufferStorage(mColorSsbo, mVertexColors.size() * sizeof(glm::u8vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glNamedBufferSubData(mColorSsbo, 0, mVertexColors.size() * sizeof(glm::u8vec4), mVertexColors.data());
 
     createFramebuffer();
     createOutputTexture();
 }
 
 void HighQualityRenderer::destroy() {
-    glDeleteBuffers(1, &mPointsSsbo);
-    glDeleteBuffers(1, &mFramebufferSsbo);
-    glDeleteBuffers(1, &mFirstDepthSsbo);
-    glDeleteBuffers(1, &mSecondDepthSsbo);
-    glDeleteBuffers(1, &mFallbackSsbo);
-    glDeleteBuffers(1, &mEmptyMaskSsbo);
-    glDeleteBuffers(1, &mFirstEdlSsbo);
-    glDeleteBuffers(1, &mSecondEdlSsbo);
-    glDeleteTextures(1, &mFirstOutputTexture);
-    glDeleteTextures(1, &mSecondOutputTexture);
-
     glDeleteProgram(mDepthProgram);
     glDeleteProgram(mColorProgram);
     glDeleteProgram(mResolveProgram);
@@ -91,12 +81,41 @@ void HighQualityRenderer::destroy() {
     glDeleteProgram(mEdlProgram);
     glDeleteProgram(mSecondResolveProgram);
     glDeleteProgram(mQuadProgram);
+
+    glDeleteShader(mDepthCs);
+    glDeleteShader(mColorCs);
+    glDeleteShader(mResolveCs);
+    glDeleteShader(mHoleFillingCs);
+    glDeleteShader(mEdlCs);
+    glDeleteShader(mSecondResolveCs);
+    glDeleteShader(mQuadVs);
+    glDeleteShader(mQuadFs);
+
+    glDeleteBuffers(1, &mPointsSsbo);
+    glDeleteBuffers(1, &mColorSsbo);
+    glDeleteBuffers(1, &mFramebufferSsbo);
+    glDeleteBuffers(1, &mFirstDepthSsbo);
+    glDeleteBuffers(1, &mSecondDepthSsbo);
+    glDeleteBuffers(1, &mFallbackSsbo);
+    glDeleteBuffers(1, &mEmptyMaskSsbo);
+    glDeleteBuffers(1, &mFirstEdlSsbo);
+    glDeleteBuffers(1, &mSecondEdlSsbo);
+
+    glDeleteTextures(1, &mFirstOutputTexture);
+    glDeleteTextures(1, &mSecondOutputTexture);
+
+    glDeleteVertexArrays(1, &mQuadVao);
 }
 
 void HighQualityRenderer::draw() {
     // Clear screen
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    uint64_t r = static_cast<uint64_t>(mParams->pointColor.r * 255.f);
+    uint64_t g = static_cast<uint64_t>(mParams->pointColor.g * 255.f);
+    uint64_t b = static_cast<uint64_t>(mParams->pointColor.b * 255.f);
+    uint64_t defaultColor = (r << 32) | (g << 16) | b;
 
     // Clear framebuffer
     uint64_t framebufferClear = 0;
@@ -139,17 +158,14 @@ void HighQualityRenderer::draw() {
     glUseProgram(mColorProgram);
     glProgramUniformMatrix4fv(mColorProgram, mColorProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
     glProgramUniform2i(mColorProgram, mColorProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
-
-    uint64_t r = static_cast<uint64_t>(mParams.pointColor.r * 255.f);
-    uint64_t g = static_cast<uint64_t>(mParams.pointColor.g * 255.f);
-    uint64_t b = static_cast<uint64_t>(mParams.pointColor.b * 255.f);
-    uint64_t rgb = (r << 32) | (g << 16) | b;
-    glProgramUniform1ui64ARB(mColorProgram, mColorProgramColorLocation, rgb);
+    glProgramUniform1ui64ARB(mColorProgram, mColorProgramUseDefaultColorLocation, mParams->useDefaultColor);
+    glProgramUniform1ui64ARB(mColorProgram, mColorProgramDefaultColorLocation, defaultColor);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFramebufferSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFirstDepthSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mFallbackSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mColorSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFramebufferSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mFirstDepthSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, mFallbackSsbo);
 
     glDispatchCompute((mVertexPositions.size() / 256) + 1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -166,13 +182,13 @@ void HighQualityRenderer::draw() {
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
     // Hole filling pass
-    if (mParams.enableHoleFilling) {
+    if (mParams->enableHoleFilling) {
         glUseProgram(mHoleFillingProgram);
 
-        for (int iteration = 0; iteration < mParams.holeFillingIterations; iteration++) {
+        for (int iteration = 0; iteration < mParams->holeFillingIterations; iteration++) {
             glProgramUniform2i(mHoleFillingProgram, mHoleFillingProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
             glProgramUniform1i(mHoleFillingProgram, mHoleFillingProgramIterationLocation, iteration);
-            glProgramUniform1f(mHoleFillingProgram, mHoleFillingProgramInfluenceLocation, mParams.holeFillingInfluence);
+            glProgramUniform1f(mHoleFillingProgram, mHoleFillingProgramInfluenceLocation, mParams->holeFillingInfluence);
 
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstDepthSsbo);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mSecondDepthSsbo);
@@ -190,13 +206,13 @@ void HighQualityRenderer::draw() {
     }
 
     // Edl pass
-    if (mParams.enableEdl) {
+    if (mParams->enableEdl) {
         glUseProgram(mEdlProgram);
 
-        for (int level = 0; level < mParams.edlLevels; level++) {
+        for (int level = 0; level < mParams->edlLevels; level++) {
             glProgramUniform2i(mEdlProgram, mEdlProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
             glProgramUniform1i(mEdlProgram, mEdlProgramLevelLocation, level);
-            glProgramUniform1f(mEdlProgram, mEdlProgramShadingFactorLocation, mParams.shadingFactor);
+            glProgramUniform1f(mEdlProgram, mEdlProgramShadingFactorLocation, mParams->shadingFactor);
 
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstDepthSsbo);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstEdlSsbo);
@@ -212,8 +228,8 @@ void HighQualityRenderer::draw() {
         glUseProgram(mSecondResolveProgram);
 
         glProgramUniform2i(mSecondResolveProgram, mSecondResolveProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
-        glProgramUniform1i(mSecondResolveProgram, mSecondResolveProgramUseEdlLocation, mParams.enableEdl);
-        glProgramUniform1f(mSecondResolveProgram, mSecondResolveProgramEdlShadingStrengthLocation, mParams.shadingStrength);
+        glProgramUniform1i(mSecondResolveProgram, mSecondResolveProgramUseEdlLocation, mParams->enableEdl);
+        glProgramUniform1f(mSecondResolveProgram, mSecondResolveProgramEdlShadingStrengthLocation, mParams->shadingStrength);
 
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstEdlSsbo);
         glBindImageTexture(0, mFirstOutputTexture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
@@ -283,6 +299,7 @@ void HighQualityRenderer::setWindowDimensions(int width, int height) {
     glDeleteBuffers(1, &mEmptyMaskSsbo);
     glDeleteBuffers(1, &mFirstEdlSsbo);
     glDeleteBuffers(1, &mSecondEdlSsbo);
+
     glDeleteTextures(1, &mFirstOutputTexture);
     glDeleteTextures(1, &mSecondOutputTexture);
 

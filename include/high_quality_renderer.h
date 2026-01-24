@@ -29,13 +29,13 @@ protected:
     GLuint mQuadVs, mQuadFs;
     
     GLint mDepthProgramMvpLocation, mDepthProgramFramebufferSizeLocation;
-    GLint mColorProgramColorLocation, mColorProgramMvpLocation, mColorProgramFramebufferSizeLocation;
+    GLint mColorProgramUseDefaultColorLocation, mColorProgramDefaultColorLocation, mColorProgramMvpLocation, mColorProgramFramebufferSizeLocation;
     GLint mResolveProgramFramebufferSizeLocation;
     GLint mHoleFillingProgramFramebufferSizeLocation, mHoleFillingProgramIterationLocation, mHoleFillingProgramInfluenceLocation;
     GLint mEdlProgramFramebufferSizeLocation, mEdlProgramLevelLocation, mEdlProgramShadingFactorLocation;
     GLint mSecondResolveProgramFramebufferSizeLocation, mSecondResolveProgramUseEdlLocation, mSecondResolveProgramEdlShadingStrengthLocation;
 
-    GLuint mPointsSsbo;
+    GLuint mPointsSsbo, mColorSsbo;
     GLuint mFirstDepthSsbo, mSecondDepthSsbo;
     GLuint mFramebufferSsbo;
     GLuint mFallbackSsbo;
@@ -45,7 +45,7 @@ protected:
     GLuint mQuadVao;
 
 public:
-    HighQualityRenderer(std::shared_ptr<BaseCamera> camera) : Renderer{camera} {}
+    HighQualityRenderer(std::shared_ptr<BaseCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~HighQualityRenderer() {}
 
     virtual void initialize() override;

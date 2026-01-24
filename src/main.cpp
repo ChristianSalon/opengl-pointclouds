@@ -24,8 +24,8 @@
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
-constexpr float MOVE_SPEED = 0.001f;
-constexpr float ROTATE_SPEED = 0.5f;
+constexpr float MOVE_SPEED = 0.005f;
+constexpr float ROTATE_SPEED = 0.4f;
 
 enum RenderAlgorithm { POINTS, BASIC_COMPUTE, HIGH_QUALITY };
 int renderAlgorithm = POINTS;
@@ -39,21 +39,46 @@ struct WindowData {
 };
 
 std::shared_ptr<BaseCamera> camera = nullptr;
-WindowData windowData = {};
+WindowData windowData{};
 
 std::unique_ptr<Renderer> renderer = nullptr;
-std::vector<glm::vec3> vertexPositions;
+std::shared_ptr<Renderer::Params> rendererParams = std::make_shared<Renderer::Params>();
+
+std::vector<glm::vec4> vertexPositions;
+std::vector<glm::u8vec4> vertexColors;
+bool hasColor = false;
 
 void loadPointCloud(std::string path) {
     happly::PLYData pointCloud{path};
+
+    // Load positions
     std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
 
     vertexPositions.clear();
     for (const std::array<double, 3> &vertex : vPos) {
-        vertexPositions.push_back(glm::vec3(vertex[0], vertex[1], vertex[2]));
+        vertexPositions.push_back(glm::vec4(vertex[0], vertex[1], vertex[2], 1.0f));
     }
 
-    renderer->setPointCloud(vertexPositions);
+    // Try to load color
+    try {
+        std::vector<std::array<unsigned char, 3>> vCol = pointCloud.getVertexColors();
+
+        vertexColors.clear();
+        for (const std::array<unsigned char, 3> &color : vCol) {
+            vertexColors.push_back(glm::u8vec4(color[0], color[1], color[2], 1.0f));
+        }
+
+        hasColor = true;
+    } catch (const std::exception &e) {
+        std::cout << "Point cloud " << path << " does not support vertex colors" << std::endl;
+
+        renderer->setPointCloud(vertexPositions);
+        hasColor = false;
+
+        return;
+    }
+
+    renderer->setPointCloud(vertexPositions, vertexColors);
 }
 
 void updateRenderer() {
@@ -67,15 +92,15 @@ void updateRenderer() {
     renderer.reset();
 
     if (renderAlgorithm == POINTS) {
-        renderer = std::make_unique<GlPointsRenderer>(camera);
+        renderer = std::make_unique<GlPointsRenderer>(camera, rendererParams);
     } else if (renderAlgorithm == BASIC_COMPUTE) {
-        renderer = std::make_unique<BasicComputeRenderer>(camera);
+        renderer = std::make_unique<BasicComputeRenderer>(camera, rendererParams);
     } else {
-        renderer = std::make_unique<HighQualityRenderer>(camera);
+        renderer = std::make_unique<HighQualityRenderer>(camera, rendererParams);
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
-    renderer->setPointCloud(vertexPositions);
+    hasColor ? renderer->setPointCloud(vertexPositions, vertexColors) : renderer->setPointCloud(vertexPositions);
 
     lastAlgorithm = renderAlgorithm;
 }
@@ -100,31 +125,39 @@ void RenderUI(ImGui::FileBrowser &fileBrowser) {
         }
 
         ImGui::Text("Point Size");
-        ImGui::SliderFloat("##pointSize", &(renderer->getParams().pointSize), 0.1f, 10.0f);
+        ImGui::SliderFloat("##pointSize", &(rendererParams->pointSize), 0.1f, 10.0f);
 
         ImGui::Text("Point Color");
-        ImGui::ColorEdit3("##pointColor", glm::value_ptr(renderer->getParams().pointColor));
+        ImGui::ColorEdit3("##pointColor", glm::value_ptr(rendererParams->pointColor));
 
-        ImGui::Checkbox("Use Default Color", &(renderer->getParams().useDefaultColor));
+        if (hasColor) {
+            ImGui::Checkbox("Use Default Color", &(rendererParams->useDefaultColor));
+        } else {
+            bool checked = true;
+
+            ImGui::BeginDisabled();
+            ImGui::Checkbox("Use Default Color", &checked);
+            ImGui::EndDisabled();
+        }
 
         ImGui::Text("Hole Filling Iterations");
-        ImGui::SliderInt("##holeFillingIterations", &(renderer->getParams().holeFillingIterations), 1, 4);
+        ImGui::SliderInt("##holeFillingIterations", &(rendererParams->holeFillingIterations), 1, 4);
 
         ImGui::Text("Hole Filling Influence");
-        ImGui::SliderFloat("##holeFillingInfluence", &(renderer->getParams().holeFillingInfluence), 0.0001f, 1.0f);
+        ImGui::SliderFloat("##holeFillingInfluence", &(rendererParams->holeFillingInfluence), 0.0001f, 1.0f);
 
-        ImGui::Checkbox("Enable Hole Filling", &(renderer->getParams().enableHoleFilling));
+        ImGui::Checkbox("Enable Hole Filling", &(rendererParams->enableHoleFilling));
 
         ImGui::Text("EDL Levels");
-        ImGui::SliderInt("##edlLevels", &(renderer->getParams().edlLevels), 1, 15);
+        ImGui::SliderInt("##edlLevels", &(rendererParams->edlLevels), 1, 15);
 
         ImGui::Text("EDL Shading Factor");
-        ImGui::SliderFloat("##edlShadingFactor", &(renderer->getParams().shadingFactor), 0.0f, 5.0f);
+        ImGui::SliderFloat("##edlShadingFactor", &(rendererParams->shadingFactor), 0.0f, 5.0f);
 
         ImGui::Text("EDL Shading Strength");
-        ImGui::SliderFloat("##edlShadingStrength", &(renderer->getParams().shadingStrength), 0.0f, 2.0f);
+        ImGui::SliderFloat("##edlShadingStrength", &(rendererParams->shadingStrength), 0.0f, 2.0f);
 
-        ImGui::Checkbox("Enable EDL", &(renderer->getParams().enableEdl));
+        ImGui::Checkbox("Enable EDL", &(rendererParams->enableEdl));
     }
 
     if (ImGui::CollapsingHeader("3. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -285,7 +318,7 @@ int main(int argc, char **argv) {
     fileBrowser.SetTypeFilters({".ply"});
 
     // Create renderer
-    renderer = std::make_unique<GlPointsRenderer>(camera);
+    renderer = std::make_unique<GlPointsRenderer>(camera, rendererParams);
     renderer->setWindowDimensions(windowData.width, windowData.height);
 
     // Load ply file
@@ -302,8 +335,8 @@ int main(int argc, char **argv) {
         RenderUI(fileBrowser);
         fileBrowser.Display();
         if (fileBrowser.HasSelected()) {
-            std::cout << "Selected .ply file: " << fileBrowser.GetSelected().string() << std::endl;
-            loadPointCloud(path.string());
+            std::cout << "Selected point cloud: " << fileBrowser.GetSelected().string() << std::endl;
+            loadPointCloud(fileBrowser.GetSelected().string());
 
             fileBrowser.ClearSelected();
         }

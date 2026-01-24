@@ -9,27 +9,32 @@ layout(std430, binding = 0) readonly buffer Points {
     vec4 positions[];
 };
 
-layout(std430, binding = 1) buffer Framebuffer {
+layout(std430, binding = 1) readonly buffer Colors {
+    uint colors[];
+};
+
+layout(std430, binding = 2) buffer Framebuffer {
     uint64_t pixels[];
 };
 
-layout(std430, binding = 2) readonly buffer Depth {
+layout(std430, binding = 3) readonly buffer Depth {
     uint depths[];
 };
 
-layout(std430, binding = 3) buffer Fallback {
+layout(std430, binding = 4) buffer Fallback {
     uint64_t fallback[];
 };
 
 uniform mat4 mvp;
 uniform ivec2 framebufferSize;
-uniform uint64_t color;
+uniform bool useDefaultColor;
+uniform uint64_t defaultColor;
 
 uint toPixelId(vec4 clip) {
     vec3 ndc = clip.xyz / clip.w;
     ivec2 screen = ivec2(
-        (ndc.x * 0.5 + 0.5) * framebufferSize.x,
-        (ndc.y * 0.5 + 0.5) * framebufferSize.y
+        (ndc.x * 0.5f + 0.5f) * framebufferSize.x,
+        (ndc.y * 0.5f + 0.5f) * framebufferSize.y
     );
 
     if (screen.x < 0 || screen.y < 0 || screen.x >= framebufferSize.x || screen.y >= framebufferSize.y) {
@@ -64,9 +69,16 @@ void main() {
         return;
     }
 
-    uint64_t red = (color & 0x0000ffff00000000ul) >> 32;
-    uint64_t green = (color & 0x00000000ffff0000ul) >> 16;
-    uint64_t blue = color & 0x00000000fffful;
+    uint64_t red = (defaultColor & 0x0000ffff00000000ul) >> 32;
+    uint64_t green = (defaultColor & 0x00000000ffff0000ul) >> 16;
+    uint64_t blue = defaultColor & 0x00000000fffful;
+    if (!useDefaultColor) {
+        vec4 c = unpackUnorm4x8(colors[id]);
+
+        red = uint64_t(c.r * 255.0f);
+        green = uint64_t(c.g * 255.0f);
+        blue = uint64_t(c.b * 255.0f);
+    }
 
     uint64_t rgba = (red << 48) | (green << 32) | (blue << 16) | 1;
     uint64_t old = atomicAdd(pixels[pixelId], rgba);

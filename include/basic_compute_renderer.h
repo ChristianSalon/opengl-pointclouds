@@ -24,12 +24,12 @@ protected:
     GLuint mRenderCs, mHoleFillingCs, mEdlCs, mResolveCs;
     GLuint mQuadVs, mQuadFs;
 
-    GLint mRenderProgramColorLocation, mRenderProgramMvpLocation, mRenderProgramFramebufferSizeLocation;
+    GLint mRenderProgramUseDefaultColorLocation, mRenderProgramDefaultColorLocation, mRenderProgramMvpLocation, mRenderProgramFramebufferSizeLocation;
     GLint mHoleFillingProgramFramebufferSizeLocation, mHoleFillingProgramIterationLocation, mHoleFillingProgramInfluenceLocation;
     GLint mEdlProgramFramebufferSizeLocation, mEdlProgramLevelLocation, mEdlProgramShadingFactorLocation;
     GLint mResolveProgramFramebufferSizeLocation, mResolveProgramUseEdlLocation, mResolveProgramEdlShadingStrengthLocation;
 
-    GLuint mPointsSsbo;
+    GLuint mPointsSsbo, mColorSsbo;
     GLuint mFirstFramebufferSsbo, mSecondFramebufferSsbo, mEmptyMaskSsbo;
     GLuint mFirstEdlSsbo, mSecondEdlSsbo;
     GLuint mOutputTexture;
@@ -38,7 +38,7 @@ protected:
 
 
 public:
-    BasicComputeRenderer(std::shared_ptr<BaseCamera> camera) : Renderer{camera} {}
+    BasicComputeRenderer(std::shared_ptr<BaseCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~BasicComputeRenderer() {}
 
     virtual void initialize() override;

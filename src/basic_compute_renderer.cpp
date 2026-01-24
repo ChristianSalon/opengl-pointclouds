@@ -29,7 +29,8 @@ void BasicComputeRenderer::initialize() {
     glLinkProgram(mResolveProgram);
     glLinkProgram(mQuadProgram);
 
-    mRenderProgramColorLocation = glGetUniformLocation(mRenderProgram, "color");
+    mRenderProgramUseDefaultColorLocation = glGetUniformLocation(mRenderProgram, "useDefaultColor");
+    mRenderProgramDefaultColorLocation = glGetUniformLocation(mRenderProgram, "defaultColor");
     mRenderProgramMvpLocation = glGetUniformLocation(mRenderProgram, "mvp");
     mRenderProgramFramebufferSizeLocation = glGetUniformLocation(mRenderProgram, "framebufferSize");
 
@@ -47,13 +48,11 @@ void BasicComputeRenderer::initialize() {
 
     glCreateBuffers(1, &mPointsSsbo);
     glNamedBufferStorage(mPointsSsbo, mVertexPositions.size() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glNamedBufferSubData(mPointsSsbo, 0, mVertexPositions.size() * sizeof(glm::vec4), mVertexPositions.data());
 
-    std::vector<glm::vec4> packed;
-    for (const glm::vec3 &vertex : mVertexPositions) {
-        packed.push_back(glm::vec4(vertex, 1.0f));
-    }
-
-    glNamedBufferSubData(mPointsSsbo, 0, packed.size() * sizeof(glm::vec4), packed.data());
+    glCreateBuffers(1, &mColorSsbo);
+    glNamedBufferStorage(mColorSsbo, mVertexColors.size() * sizeof(glm::u8vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glNamedBufferSubData(mColorSsbo, 0, mVertexColors.size() * sizeof(glm::u8vec4), mVertexColors.data());
 
     glCreateVertexArrays(1, &mQuadVao);
 
@@ -62,25 +61,42 @@ void BasicComputeRenderer::initialize() {
 }
 
 void BasicComputeRenderer::destroy() {
-    glDeleteBuffers(1, &mPointsSsbo);
-    glDeleteBuffers(1, &mFirstFramebufferSsbo);
-    glDeleteBuffers(1, &mSecondFramebufferSsbo);
-    glDeleteBuffers(1, &mEmptyMaskSsbo);
-    glDeleteBuffers(1, &mFirstEdlSsbo);
-    glDeleteBuffers(1, &mSecondEdlSsbo);
-    glDeleteTextures(1, &mOutputTexture);
-
     glDeleteProgram(mRenderProgram);
     glDeleteProgram(mHoleFillingProgram);
     glDeleteProgram(mEdlProgram);
     glDeleteProgram(mResolveProgram);
     glDeleteProgram(mQuadProgram);
+
+    glDeleteShader(mRenderCs);
+    glDeleteShader(mHoleFillingCs);
+    glDeleteShader(mEdlCs);
+    glDeleteShader(mResolveCs);
+    glDeleteShader(mQuadVs);
+    glDeleteShader(mQuadFs);
+
+    glDeleteBuffers(1, &mPointsSsbo);
+    glDeleteBuffers(1, &mColorSsbo);
+    glDeleteBuffers(1, &mFirstFramebufferSsbo);
+    glDeleteBuffers(1, &mSecondFramebufferSsbo);
+    glDeleteBuffers(1, &mEmptyMaskSsbo);
+    glDeleteBuffers(1, &mFirstEdlSsbo);
+    glDeleteBuffers(1, &mSecondEdlSsbo);
+
+    glDeleteTextures(1, &mOutputTexture);
+
+    glDeleteVertexArrays(1, &mQuadVao);
+
 }
 
 void BasicComputeRenderer::draw() {
     // Clear screen
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    uint32_t r = static_cast<uint32_t>(mParams->pointColor.r * 255.0f);
+    uint32_t g = static_cast<uint32_t>(mParams->pointColor.g * 255.0f);
+    uint32_t b = static_cast<uint32_t>(mParams->pointColor.b * 255.0f);
+    uint32_t defaultColor = (r << 16) | (g << 8) | b;
 
     // Clear framebuffer
     uint64_t framebufferClear = 0xffffffffff000000;
@@ -104,27 +120,24 @@ void BasicComputeRenderer::draw() {
     glUseProgram(mRenderProgram);
     glProgramUniformMatrix4fv(mRenderProgram, mRenderProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
     glProgramUniform2i(mRenderProgram, mRenderProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
-
-    uint32_t r = static_cast<uint32_t>(mParams.pointColor.r * 255.0f);
-    uint32_t g = static_cast<uint32_t>(mParams.pointColor.g * 255.0f);
-    uint32_t b = static_cast<uint32_t>(mParams.pointColor.b * 255.0f);
-    uint32_t rgb = (r << 16) | (g << 8) | b;
-    glProgramUniform1ui(mRenderProgram, mRenderProgramColorLocation, rgb);
+    glProgramUniform1ui(mRenderProgram, mRenderProgramUseDefaultColorLocation, mParams->useDefaultColor);
+    glProgramUniform1ui(mRenderProgram, mRenderProgramDefaultColorLocation, defaultColor);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstFramebufferSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mColorSsbo);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFirstFramebufferSsbo);
 
     glDispatchCompute((mVertexPositions.size() / 256) + 1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
     // Hole filling pass
-    if (mParams.enableHoleFilling) {
+    if (mParams->enableHoleFilling) {
         glUseProgram(mHoleFillingProgram);
 
-        for (int iteration = 0; iteration < mParams.holeFillingIterations; iteration++) {
+        for (int iteration = 0; iteration < mParams->holeFillingIterations; iteration++) {
             glProgramUniform2i(mHoleFillingProgram, mHoleFillingProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
             glProgramUniform1i(mHoleFillingProgram, mHoleFillingProgramIterationLocation, iteration);
-            glProgramUniform1f(mHoleFillingProgram, mHoleFillingProgramInfluenceLocation, mParams.holeFillingInfluence);
+            glProgramUniform1f(mHoleFillingProgram, mHoleFillingProgramInfluenceLocation, mParams->holeFillingInfluence);
 
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstFramebufferSsbo);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mSecondFramebufferSsbo);
@@ -138,13 +151,13 @@ void BasicComputeRenderer::draw() {
     }
 
     // Edl pass
-    if (mParams.enableEdl) {
+    if (mParams->enableEdl) {
         glUseProgram(mEdlProgram);
 
-        for (int level = 0; level < mParams.edlLevels; level++) {
+        for (int level = 0; level < mParams->edlLevels; level++) {
             glProgramUniform2i(mEdlProgram, mEdlProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
             glProgramUniform1i(mEdlProgram, mEdlProgramLevelLocation, level);
-            glProgramUniform1f(mEdlProgram, mEdlProgramShadingFactorLocation, mParams.shadingFactor);
+            glProgramUniform1f(mEdlProgram, mEdlProgramShadingFactorLocation, mParams->shadingFactor);
 
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstFramebufferSsbo);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstEdlSsbo);
@@ -160,8 +173,8 @@ void BasicComputeRenderer::draw() {
     // Resolve pass
     glUseProgram(mResolveProgram);
     glProgramUniform2i(mResolveProgram, mResolveProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
-    glProgramUniform1i(mResolveProgram, mResolveProgramUseEdlLocation, mParams.enableEdl);
-    glProgramUniform1f(mResolveProgram, mResolveProgramEdlShadingStrengthLocation, mParams.shadingStrength);
+    glProgramUniform1i(mResolveProgram, mResolveProgramUseEdlLocation, mParams->enableEdl);
+    glProgramUniform1f(mResolveProgram, mResolveProgramEdlShadingStrengthLocation, mParams->shadingStrength);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mFirstFramebufferSsbo);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstEdlSsbo);
@@ -217,6 +230,7 @@ void BasicComputeRenderer::setWindowDimensions(int width, int height) {
     glDeleteBuffers(1, &mEmptyMaskSsbo);
     glDeleteBuffers(1, &mFirstEdlSsbo);
     glDeleteBuffers(1, &mSecondEdlSsbo);
+
     glDeleteTextures(1, &mOutputTexture);
 
     createFramebuffer();

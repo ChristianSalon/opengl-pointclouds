@@ -31,12 +31,13 @@ protected:
     int mWindowWidth{0};
     int mWindowHeight{0};
 
-    std::vector<glm::vec3> mVertexPositions;
+    std::vector<glm::vec4> mVertexPositions;
+    std::vector<glm::u8vec4> mVertexColors;
 
-    Params mParams{};
+    std::shared_ptr <Params> mParams{nullptr};
 
 public:
-    Renderer(std::shared_ptr<BaseCamera> camera) : mCamera{camera} {}
+    Renderer(std::shared_ptr<BaseCamera> camera, std::shared_ptr<Params> params) : mCamera{camera}, mParams{params} {}
     virtual ~Renderer() {}
 
     virtual void initialize() = 0;
@@ -44,9 +45,9 @@ public:
     virtual void draw() = 0;
 
     virtual void setWindowDimensions(int width, int height);
-    virtual void setPointCloud(const std::vector<glm::vec3> &vertexPositions);
 
-    virtual Params &getParams() { return mParams; }
+    virtual void setPointCloud(const std::vector<glm::vec4> &vertexPositions, const std::vector<glm::u8vec4> &vertexColors);
+    virtual void setPointCloud(const std::vector<glm::vec4> &vertexPositions);
 
 protected:
     static GLuint createShader(std::filesystem::path path, GLenum type);

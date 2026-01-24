@@ -9,19 +9,24 @@ layout(std430, binding = 0) readonly buffer Points {
     vec4 positions[];
 };
 
-layout(std430, binding = 1) buffer Framebuffer {
+layout(std430, binding = 1) readonly buffer Colors {
+    uint colors[];
+};
+
+layout(std430, binding = 2) buffer Framebuffer {
     uint64_t pixels[];
 };
 
 uniform mat4 mvp;
 uniform ivec2 framebufferSize;
-uniform uint color;
+uniform bool useDefaultColor;
+uniform uint defaultColor;
 
 uint toPixelId(vec4 clip) {
     vec3 ndc = clip.xyz / clip.w;
     ivec2 screen = ivec2(
-        (ndc.x * 0.5 + 0.5) * framebufferSize.x,
-        (ndc.y * 0.5 + 0.5) * framebufferSize.y
+        (ndc.x * 0.5f + 0.5f) * framebufferSize.x,
+        (ndc.y * 0.5f + 0.5f) * framebufferSize.y
     );
 
     if (screen.x < 0 || screen.y < 0 || screen.x >= framebufferSize.x || screen.y >= framebufferSize.y) {
@@ -53,6 +58,18 @@ void main() {
     float depth01 = clamp(depthNdc * 0.5 + 0.5, 0.0f, 1.0f);
     // 2^32 - 1 = 4294967295
     uint64_t depth = uint64_t(depth01 * 4294967295.0f);
-    uint64_t point = (uint64_t(depth) << 32) | (uint64_t(color & 0xffffffu));
+
+    uint64_t color = uint64_t(defaultColor & 0xffffffu);
+    if (!useDefaultColor) {
+        vec4 c = unpackUnorm4x8(colors[id]);
+
+        uint64_t r = uint64_t(c.r * 255.0f) << 16;
+        uint64_t g = uint64_t(c.g * 255.0f) << 8;
+        uint64_t b = uint64_t(c.b * 255.0f);
+
+        color = r | g | b;
+    }
+
+    uint64_t point = (uint64_t(depth) << 32) | color;
     atomicMin(pixels[pixelId], point);
 }
