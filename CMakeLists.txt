@@ -38,12 +38,17 @@ set(SHADERS
     ${SHADERS_PATH}/gl_points.vert
     ${SHADERS_PATH}/gl_points.frag
     ${SHADERS_PATH}/basic_compute_render.comp
+    ${SHADERS_PATH}/basic_compute_hole_filling.comp
+    ${SHADERS_PATH}/basic_compute_edl.comp
     ${SHADERS_PATH}/basic_compute_resolve.comp
     ${SHADERS_PATH}/basic_compute_quad.vert
     ${SHADERS_PATH}/basic_compute_quad.frag
     ${SHADERS_PATH}/high_quality_depth.comp
     ${SHADERS_PATH}/high_quality_color.comp
     ${SHADERS_PATH}/high_quality_resolve.comp
+    ${SHADERS_PATH}/high_quality_hole_filling.comp
+    ${SHADERS_PATH}/high_quality_edl.comp
+    ${SHADERS_PATH}/high_quality_second_resolve.comp
     ${SHADERS_PATH}/high_quality_quad.vert
     ${SHADERS_PATH}/high_quality_quad.frag
 )
@@ -79,6 +84,9 @@ target_include_directories(imgui PUBLIC
     ${LIBS_PATH}/glfw/include
 )
 target_link_libraries(imgui PUBLIC glfw glad)
+
+# imgui-filebrowser
+target_include_directories(${EXECUTABLE_NAME} PUBLIC ${LIBS_PATH}/imgui-filebrowser)
 
 # glm
 add_subdirectory(${LIBS_PATH}/glm)

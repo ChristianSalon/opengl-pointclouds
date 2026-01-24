@@ -31,3 +31,12 @@ void Renderer::setWindowDimensions(int width, int height) {
     mWindowWidth = width;
     mWindowHeight = height;
 }
+
+void Renderer::setPointCloud(const std::vector<glm::vec3>& vertexPositions) {
+    mVertexPositions = vertexPositions;
+
+    glFinish();
+
+    destroy();
+    initialize();
+}

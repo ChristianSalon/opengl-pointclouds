@@ -15,6 +15,7 @@ layout(std430, binding = 1) buffer Framebuffer {
 
 uniform mat4 mvp;
 uniform ivec2 framebufferSize;
+uniform uint color;
 
 uint toPixelId(vec4 clip) {
     vec3 ndc = clip.xyz / clip.w;
@@ -38,7 +39,7 @@ void main() {
 
     vec4 clip = mvp * positions[id];
     // Near plane clipping
-    if (clip.w <= 0.f) {
+    if (clip.w <= 0.0f) {
         return; 
     }
 
@@ -47,9 +48,11 @@ void main() {
         return;
     }
 
-    uint depth = floatBitsToUint(clip.w);
-    uint color = (0 << 16) | (0 << 8) | 255;
-
-    uint64_t point = (uint64_t(depth) << 32) | uint64_t(color);
+    // TODO: NDC depth is not linear
+    float depthNdc = clip.z / clip.w;
+    float depth01 = clamp(depthNdc * 0.5 + 0.5, 0.0f, 1.0f);
+    // 2^32 - 1 = 4294967295
+    uint64_t depth = uint64_t(depth01 * 4294967295.0f);
+    uint64_t point = (uint64_t(depth) << 32) | (uint64_t(color & 0xffffffu));
     atomicMin(pixels[pixelId], point);
 }

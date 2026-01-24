@@ -35,7 +35,7 @@ void main() {
 
     vec4 clip = mvp * positions[id];
     // Near plane clipping
-    if (clip.w <= 0.f) {
+    if (clip.w <= 0.0f) {
         return; 
     }
 
@@ -44,6 +44,9 @@ void main() {
         return;
     }
 
-    uint depth = floatBitsToUint(clip.w);
+    float depthNdc = clip.z / clip.w;
+    float depth01 = clamp(depthNdc * 0.5f + 0.5f, 0.0f, 1.0f);
+    // 2^32 - 1 = 4294967295
+    uint depth = uint(depth01 * 4294967295.0f);
     atomicMin(depths[pixelId], depth);
 }

@@ -8,27 +8,37 @@
 class BasicComputeRenderer : public Renderer {
 public:
     const std::filesystem::path RENDER_PASS_CS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_render.comp";
+    const std::filesystem::path HOLE_FILLING_CS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_hole_filling.comp";
+    const std::filesystem::path EDL_CS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_edl.comp";
     const std::filesystem::path RESOLVE_PASS_CS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_resolve.comp";
     const std::filesystem::path QUAD_VS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_quad.vert ";
     const std::filesystem::path QUAD_FS_PATH = getExecutableDirectory() / "shaders" / "basic_compute_quad.frag ";
 
 protected:
     GLuint mRenderProgram;
+    GLuint mHoleFillingProgram;
+    GLuint mEdlProgram;
     GLuint mResolveProgram;
     GLuint mQuadProgram;
 
-    GLuint mRenderCs, mResolveCs;
+    GLuint mRenderCs, mHoleFillingCs, mEdlCs, mResolveCs;
     GLuint mQuadVs, mQuadFs;
 
+    GLint mRenderProgramColorLocation, mRenderProgramMvpLocation, mRenderProgramFramebufferSizeLocation;
+    GLint mHoleFillingProgramFramebufferSizeLocation, mHoleFillingProgramIterationLocation, mHoleFillingProgramInfluenceLocation;
+    GLint mEdlProgramFramebufferSizeLocation, mEdlProgramLevelLocation, mEdlProgramShadingFactorLocation;
+    GLint mResolveProgramFramebufferSizeLocation, mResolveProgramUseEdlLocation, mResolveProgramEdlShadingStrengthLocation;
+
     GLuint mPointsSsbo;
-    GLuint mFramebufferSsbo;
+    GLuint mFirstFramebufferSsbo, mSecondFramebufferSsbo, mEmptyMaskSsbo;
+    GLuint mFirstEdlSsbo, mSecondEdlSsbo;
     GLuint mOutputTexture;
 
     GLuint mQuadVao;
 
+
 public:
-    BasicComputeRenderer(const std::vector<glm::vec3> &vertexPositions, std::shared_ptr<BaseCamera> camera)
-        : Renderer{vertexPositions, camera} {}
+    BasicComputeRenderer(std::shared_ptr<BaseCamera> camera) : Renderer{camera} {}
     virtual ~BasicComputeRenderer() {}
 
     virtual void initialize() override;

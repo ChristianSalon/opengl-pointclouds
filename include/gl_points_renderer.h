@@ -15,10 +15,11 @@ protected:
 
     GLint mViewLocation;
     GLint mProjLocation;
+    GLint mColorLocation;
+    GLint mPointSizeLocation;
 
 public:
-    GlPointsRenderer(const std::vector<glm::vec3> &vertexPositions, std::shared_ptr<BaseCamera> camera)
-        : Renderer{vertexPositions, camera} {}
+    GlPointsRenderer(std::shared_ptr<BaseCamera> camera) : Renderer{camera} {}
     virtual ~GlPointsRenderer() {}
 
     virtual void initialize() override;

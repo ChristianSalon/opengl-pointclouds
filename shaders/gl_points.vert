@@ -6,10 +6,13 @@ layout(location = 0) out vec4 outColor;
 
 uniform mat4 view;
 uniform mat4 proj;
+uniform vec3 color;
+uniform float pointSize = 1.0f;
 
 void main() {
-    vec4 vertex = vec4(inPos, 1.f);       
+    vec4 vertex = vec4(inPos, 1.0f);       
 
     gl_Position = proj * view * vertex;
-    outColor = vec4(0.f, 0.f, 1.f, 1.f);
+    gl_PointSize = pointSize;
+    outColor = vec4(color, 1.0f);
 }

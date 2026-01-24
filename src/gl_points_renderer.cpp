@@ -13,6 +13,8 @@ void GlPointsRenderer::initialize() {
 
     mViewLocation = glGetUniformLocation(mProgram, "view");
     mProjLocation = glGetUniformLocation(mProgram, "proj");
+    mColorLocation = glGetUniformLocation(mProgram, "color");
+    mPointSizeLocation = glGetUniformLocation(mProgram, "pointSize");
 
     glCreateVertexArrays(1, &mVao);
     glCreateBuffers(1, &mVbo);
@@ -34,16 +36,20 @@ void GlPointsRenderer::destroy() {
 
 void GlPointsRenderer::draw() {
     // OpenGL clear
-    glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // OpenGl Draw
     glUseProgram(mProgram);
+    glEnable(GL_PROGRAM_POINT_SIZE);
 
     glm::mat4 viewMatrix = mCamera->viewMatrix();
     glm::mat4 projectionMatrix = mCamera->projectionMatrix();
-    glProgramUniformMatrix4fv(mProgram, mViewLocation, 1, GL_FALSE, (float *) &viewMatrix);
-    glProgramUniformMatrix4fv(mProgram, mProjLocation, 1, GL_FALSE, (float *) &projectionMatrix);
+
+    glProgramUniformMatrix4fv(mProgram, mViewLocation, 1, GL_FALSE, (float *)&viewMatrix);
+    glProgramUniformMatrix4fv(mProgram, mProjLocation, 1, GL_FALSE, (float *)&projectionMatrix);
+    glProgramUniform3fv(mProgram, mColorLocation, 1, (float *)glm::value_ptr(mParams.pointColor));
+    glUniform1f(glGetUniformLocation(mProgram, "pointSize"), mParams.pointSize);
 
     glBindVertexArray(mVao);
     glDrawArrays(GL_POINTS, 0, mVertexPositions.size());

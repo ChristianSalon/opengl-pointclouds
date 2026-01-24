@@ -13,7 +13,7 @@ layout(std430, binding = 1) buffer Framebuffer {
     uint64_t pixels[];
 };
 
-layout(std430, binding = 2) buffer Depth {
+layout(std430, binding = 2) readonly buffer Depth {
     uint depths[];
 };
 
@@ -23,6 +23,7 @@ layout(std430, binding = 3) buffer Fallback {
 
 uniform mat4 mvp;
 uniform ivec2 framebufferSize;
+uniform uint64_t color;
 
 uint toPixelId(vec4 clip) {
     vec3 ndc = clip.xyz / clip.w;
@@ -46,7 +47,7 @@ void main() {
 
     vec4 clip = mvp * positions[id];
     // Near plane clipping
-    if (clip.w <= 0.f) {
+    if (clip.w <= 0.0f) {
         return; 
     }
 
@@ -55,14 +56,17 @@ void main() {
         return;
     }
 
-    float bufferDepth = uintBitsToFloat(depths[pixelId]);
-    if (clip.w > bufferDepth * 1.01) {
+    // Convert uint depth to float in range [0, 1]
+    // TODO: NDC depth is not linear
+    float bufferDepth = float(depths[pixelId]) / 4294967295.0f;
+    float pixelDepth = clamp((clip.z / clip.w) * 0.5f + 0.5f, 0.0f, 1.0f);
+    if (pixelDepth > bufferDepth * 1.01f) {
         return;
     }
 
-    uint64_t red = 0;
-    uint64_t green = 0;
-    uint64_t blue = 255;
+    uint64_t red = (color & 0x0000ffff00000000ul) >> 32;
+    uint64_t green = (color & 0x00000000ffff0000ul) >> 16;
+    uint64_t blue = color & 0x00000000fffful;
 
     uint64_t rgba = (red << 48) | (green << 32) | (blue << 16) | 1;
     uint64_t old = atomicAdd(pixels[pixelId], rgba);

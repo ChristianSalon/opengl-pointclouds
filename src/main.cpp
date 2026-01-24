@@ -8,10 +8,12 @@
 #include <happly.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "imfilebrowser.h"
 
 #include "path_utils.h"
 #include "perspective_camera.h"
@@ -22,9 +24,115 @@
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
-
 constexpr float MOVE_SPEED = 0.001f;
 constexpr float ROTATE_SPEED = 0.5f;
+
+enum RenderAlgorithm { POINTS, BASIC_COMPUTE, HIGH_QUALITY };
+int renderAlgorithm = POINTS;
+
+struct WindowData {
+    std::shared_ptr<BaseCamera> camera = nullptr;
+    bool leftMousePressed = false;
+    bool rightMousePressed = false;
+    int width = WINDOW_WIDTH;
+    int height = WINDOW_HEIGHT;
+};
+
+std::shared_ptr<BaseCamera> camera = nullptr;
+WindowData windowData = {};
+
+std::unique_ptr<Renderer> renderer = nullptr;
+std::vector<glm::vec3> vertexPositions;
+
+void loadPointCloud(std::string path) {
+    happly::PLYData pointCloud{path};
+    std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
+
+    vertexPositions.clear();
+    for (const std::array<double, 3> &vertex : vPos) {
+        vertexPositions.push_back(glm::vec3(vertex[0], vertex[1], vertex[2]));
+    }
+
+    renderer->setPointCloud(vertexPositions);
+}
+
+void updateRenderer() {
+    static int lastAlgorithm = POINTS;
+
+    if (renderAlgorithm == lastAlgorithm) return;
+
+    glFinish();
+
+    renderer->destroy();
+    renderer.reset();
+
+    if (renderAlgorithm == POINTS) {
+        renderer = std::make_unique<GlPointsRenderer>(camera);
+    } else if (renderAlgorithm == BASIC_COMPUTE) {
+        renderer = std::make_unique<BasicComputeRenderer>(camera);
+    } else {
+        renderer = std::make_unique<HighQualityRenderer>(camera);
+    }
+
+    renderer->setWindowDimensions(windowData.width, windowData.height);
+    renderer->setPointCloud(vertexPositions);
+
+    lastAlgorithm = renderAlgorithm;
+}
+
+void RenderUI(ImGui::FileBrowser &fileBrowser) {
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+
+    ImGui::Begin("Side Panel");
+
+    if (ImGui::CollapsingHeader("1. Load Data", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Button("Select .ply file", ImVec2(-1, 0))) {
+            fileBrowser.Open();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("2. Render Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Algorithm");
+
+        const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality"};
+        if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
+            updateRenderer();
+        }
+
+        ImGui::Text("Point Size");
+        ImGui::SliderFloat("##pointSize", &(renderer->getParams().pointSize), 0.1f, 10.0f);
+
+        ImGui::Text("Point Color");
+        ImGui::ColorEdit3("##pointColor", glm::value_ptr(renderer->getParams().pointColor));
+
+        ImGui::Checkbox("Use Default Color", &(renderer->getParams().useDefaultColor));
+
+        ImGui::Text("Hole Filling Iterations");
+        ImGui::SliderInt("##holeFillingIterations", &(renderer->getParams().holeFillingIterations), 1, 4);
+
+        ImGui::Text("Hole Filling Influence");
+        ImGui::SliderFloat("##holeFillingInfluence", &(renderer->getParams().holeFillingInfluence), 0.0001f, 1.0f);
+
+        ImGui::Checkbox("Enable Hole Filling", &(renderer->getParams().enableHoleFilling));
+
+        ImGui::Text("EDL Levels");
+        ImGui::SliderInt("##edlLevels", &(renderer->getParams().edlLevels), 1, 15);
+
+        ImGui::Text("EDL Shading Factor");
+        ImGui::SliderFloat("##edlShadingFactor", &(renderer->getParams().shadingFactor), 0.0f, 5.0f);
+
+        ImGui::Text("EDL Shading Strength");
+        ImGui::SliderFloat("##edlShadingStrength", &(renderer->getParams().shadingStrength), 0.0f, 2.0f);
+
+        ImGui::Checkbox("Enable EDL", &(renderer->getParams().enableEdl));
+    }
+
+    if (ImGui::CollapsingHeader("3. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    }
+
+    ImGui::End();
+}
 
 int main(int argc, char **argv) {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
@@ -53,17 +161,7 @@ int main(int argc, char **argv) {
     }
 
     // Camera
-    struct WindowData {
-        std::shared_ptr<BaseCamera> camera = nullptr;
-        bool leftMousePressed = false;
-        bool rightMousePressed = false;
-        int width = WINDOW_WIDTH;
-        int height = WINDOW_HEIGHT;
-    };
-
-    std::shared_ptr<BaseCamera> camera = std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
-
-    WindowData windowData{};
+    camera = std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
     windowData.camera = camera;
 
     if (!glfwInit()) {
@@ -170,20 +268,6 @@ int main(int argc, char **argv) {
         glViewport(0, 0, width, height);
     });
 
-    // Load ply file
-    std::filesystem::path path = getExecutableDirectory() / plyPath;
-    happly::PLYData pointCloud{path.string()};
-    std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
-    std::vector<glm::vec3> vertexPositions;
-    for (const std::array<double, 3> &vertex : vPos) {
-        vertexPositions.push_back(glm::vec3(vertex[0], vertex[1], vertex[2]));
-    }
-
-    // Create renderer
-    std::unique_ptr<Renderer> renderer = std::make_unique<HighQualityRenderer>(vertexPositions, camera);
-    renderer->setWindowDimensions(windowData.width, windowData.height);
-    renderer->initialize();
-
     // Initialize imgui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -196,7 +280,17 @@ int main(int argc, char **argv) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
 
-    int algorithm = 0;
+    ImGui::FileBrowser fileBrowser;
+    fileBrowser.SetTitle("Select Point Cloud");
+    fileBrowser.SetTypeFilters({".ply"});
+
+    // Create renderer
+    renderer = std::make_unique<GlPointsRenderer>(camera);
+    renderer->setWindowDimensions(windowData.width, windowData.height);
+
+    // Load ply file
+    std::filesystem::path path = getExecutableDirectory() / plyPath;
+    loadPointCloud(path.string());
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
@@ -205,22 +299,18 @@ int main(int argc, char **argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Draw point cloud
-        renderer->draw();
+        RenderUI(fileBrowser);
+        fileBrowser.Display();
+        if (fileBrowser.HasSelected()) {
+            std::cout << "Selected .ply file: " << fileBrowser.GetSelected().string() << std::endl;
+            loadPointCloud(path.string());
 
-        // imgui draw
-        ImGui::Begin("Settings");
-
-        int selectedAlgorithm;
-        if (ImGui::Combo("Algorithm", &selectedAlgorithm, "GL_POINTS\0Basic Compute\0High Quality Shading")) {
-            if (algorithm != selectedAlgorithm) {
-                // Switch algorithm
-            }
+            fileBrowser.ClearSelected();
         }
 
-        ImGui::End();
-
-        std::string path;
+        // Draw point cloud
+        renderer->setWindowDimensions(windowData.width, windowData.height);
+        renderer->draw();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

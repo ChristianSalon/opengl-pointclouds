@@ -1,0 +1,165 @@
+#version 460
+
+#extension GL_ARB_gpu_shader_int64 : enable
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430, binding = 0) readonly buffer SourceDepth {
+    uint sourceDepths[];
+};
+
+layout(std430, binding = 1) writeonly buffer DestinationDepth {
+    uint destinationDepths[];
+};
+
+layout(std430, binding = 2) buffer EmptyPixels {
+    uint empty[];
+};
+
+layout(binding = 0, rgba8) readonly uniform image2D sourceTexture;
+layout(binding = 1, rgba8) writeonly uniform image2D destinationTexture;
+
+uniform ivec2 framebufferSize;
+uniform int iteration;
+uniform float influence;
+
+bool is_pixel_empty(uint depth) {
+    // Check if depth is valid
+    return depth == 0xffffffffu;
+}
+
+void bubble_sort(inout uint depth[9], inout vec4 color[9], uint count) {
+    for (int i = 0; i < count; i++) {
+        bool sorted = true;
+
+        for (int j = 0; j < count - 1 - i; j++) {
+            if (depth[j] > depth[j + 1]) {
+                uint tempDepth = depth[j];
+                depth[j] = depth[j + 1];
+                depth[j + 1] = tempDepth;
+
+                vec4 tempColor = color[j];
+                color[j] = color[j + 1];
+                color[j + 1] = tempColor;
+
+                sorted = false;
+            }
+        }
+
+        if (sorted) return;
+    }
+}
+
+vec4 median(uint depth[9], vec4 color[9], uint count, out uint d) {
+    bubble_sort(depth, color, count);
+
+    if (count % 2 == 0) {
+        d = (depth[count / 2 - 1] + depth[count / 2]) / 2;
+        return (color[count / 2 - 1] + color[count / 2]) / 2;
+    } else {
+        d = depth[count / 2];
+        return color[count / 2];
+    }
+}
+
+void main() {
+    ivec2 position = ivec2(gl_GlobalInvocationID.xy);
+    if (position.x >= framebufferSize.x || position.y >= framebufferSize.y) {
+        return;
+    }
+
+    uint index = uint(position.x + position.y * framebufferSize.x);
+    vec4 color = imageLoad(sourceTexture, position);
+    uint depth = sourceDepths[index];
+    float depth01 = float(depth) / 4294967295.0f;
+
+    // Gather all empty (invalid) pixels
+    if (iteration == 0) {
+        empty[index] = is_pixel_empty(depth) ? 1 : 0;
+        imageStore(destinationTexture, position, color);
+        destinationDepths[index] = depth;
+
+        return;
+    }
+
+    // Skip non-empty pixels
+    if (empty[index] == 0) {
+        imageStore(destinationTexture, position, color);
+        destinationDepths[index] = depth;
+
+        return;
+    }
+
+    if (is_pixel_empty(depth)) {
+        // Pixel was initially empty and still is
+        // Calculate depth median of a 3x3 neighborhood
+        vec4 neighborhoodColor[9];
+        uint neighborhoodDepth[9];
+        int count = 0;
+
+        for(int j = -1; j <= 1; j++) {
+            for(int i = -1; i <= 1; i++) {
+                ivec2 neighborPosition = clamp(position + ivec2(i, j), ivec2(0), framebufferSize - 1);
+                uint neighborIndex = uint(neighborPosition.x + neighborPosition.y * framebufferSize.x);
+                vec4 neighborColor = imageLoad(sourceTexture, neighborPosition);
+                uint neighborDepth = sourceDepths[neighborIndex];
+
+                if (!is_pixel_empty(neighborDepth)) {
+                    neighborhoodColor[count] = neighborColor;
+                    neighborhoodDepth[count] = neighborDepth;
+                    count++;
+                }
+            }
+        }
+
+        if (count > 0) {
+            uint medianDepth;
+            vec4 medianColor = median(neighborhoodDepth, neighborhoodColor, count, medianDepth);
+
+            imageStore(destinationTexture, position, medianColor);
+            destinationDepths[index] = medianDepth;
+            
+            return;
+        }
+    } else {
+        // Pixel was initially empty but now it has a valid depth
+        // Update depth and color based on a 3x3 neighborhood
+
+        float depthSum = 0.0f;
+        vec4 colorSum = vec4(0.0f);
+        float weightSum = 0.0f;
+
+        for (int j = -1; j <= 1; j++) {
+            for (int i = -1; i <= 1; i++) {
+                ivec2 neighborPosition = clamp(position + ivec2(i, j), ivec2(0), framebufferSize - 1);
+                uint neighborIndex = uint(neighborPosition.x + neighborPosition.y * framebufferSize.x);
+                vec4 neighborColor = imageLoad(sourceTexture, neighborPosition);
+                uint neighborDepth = sourceDepths[neighborIndex];
+                float neighborDepth01 = float(neighborDepth) / 4294967295.0f;
+
+                if (is_pixel_empty(neighborDepth)) {
+                    continue;
+                }
+
+                float weight = (1.0f - length(vec2(i, j)) / 2.0f) * (1.0f - min(1.0f, abs(neighborDepth01 - depth01) / influence));
+                depthSum += weight * neighborDepth01;
+                colorSum += weight * neighborColor;
+                weightSum += weight;
+            }
+        }
+
+        if (weightSum > 0.0f) {
+            float d01 = depthSum / weightSum;
+            uint d = uint(d01 * 4294967295.0f);
+            vec4 c = colorSum / weightSum;
+            
+            imageStore(destinationTexture, position, c);
+            destinationDepths[index] = d;
+
+            return;
+        }
+    }
+    
+    imageStore(destinationTexture, position, color);
+    destinationDepths[index] = depth;
+}

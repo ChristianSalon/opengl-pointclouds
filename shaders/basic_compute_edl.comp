@@ -1,0 +1,94 @@
+#version 460
+
+#extension GL_ARB_gpu_shader_int64 : enable
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430, binding = 0) readonly buffer Framebuffer {
+    uint64_t pixels[];
+};
+
+// r = depth
+// g = shading term
+layout(std430, binding = 1) readonly buffer SourceEdl {
+    vec2 edlIn[];
+};
+
+layout(std430, binding = 2) writeonly buffer DestinationEdl {
+    vec2 edlOut[];
+};
+
+uniform ivec2 framebufferSize;
+uniform int level;
+uniform float shadingFactor;
+
+const float EPS = 1e-6;
+
+bool is_pixel_empty(uint64_t pixel) {
+    // Check if depth is valid
+    return (pixel >> 32) == 0xfffffffful;
+}
+
+void main() {
+    ivec2 position = ivec2(gl_GlobalInvocationID.xy);
+    if (position.x >= framebufferSize.x || position.y >= framebufferSize.y) {
+        return;
+    }
+
+    uint index = uint(position.x + position.y * framebufferSize.x);
+    uint64_t pixel = pixels[index];
+
+    if (is_pixel_empty(pixel)) {
+        edlOut[index].r = 0.0f;
+        edlOut[index].g = 0.0f;
+
+        return;
+    }
+
+    // Depth is in range [0, 1]
+    float d = level == 0 ? float(pixels[index] >> 32) / 4294967295.0f : edlIn[index].r;
+
+    // Get neighborhood depths in range [0, 1]
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
+    float neighbors[9];
+    for (int i = 0; i < 9; i++) {
+        ivec2 neighborPosition = clamp(position + ivec2((i % 3) - 1, (i / 3) - 1), ivec2(0), framebufferSize - 1);
+        uint neighborIndex = uint(neighborPosition.x + neighborPosition.y * framebufferSize.x);
+
+        if (level == 0) {
+            neighbors[i] = float(pixels[neighborIndex] >> 32) / 4294967295.0f;
+        } else {
+            neighbors[i] = edlIn[neighborIndex].r;
+        }
+    }
+
+    // Calculate mean depth
+    float depthSum = 0.0f;
+    for (int i = 0; i < 9; i++) {
+        depthSum += float(neighbors[i]);
+    }
+    float mean = depthSum / 9.0f;
+
+    // Calculate depth standard deviation
+    float squareErrorSum = 0.0f;
+    for (int i = 0; i < 9; i++) {
+        float e = float(neighbors[i]) - mean;
+        squareErrorSum += pow(e, 2);
+    }
+    float std = sqrt(squareErrorSum / 9.0f);
+
+    // Outlier interval
+    float dMin = mean - std;
+    float dMax = mean + std;
+
+    // Shading term at level k
+    float stk = clamp(1.0f - (abs(d - dMin) / (dMax - dMin + EPS)), 0.0f, 1.0f);
+    // Final shading term
+    float st = stk / pow(level + 1, shadingFactor);
+
+    // Save current edl level to ssbo
+    edlOut[index].r = (mean + dMin) * 0.5f;
+    edlOut[index].g = edlIn[index].g + st;
+}
