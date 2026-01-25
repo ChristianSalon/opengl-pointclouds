@@ -31,18 +31,19 @@ enum RenderAlgorithm { POINTS, BASIC_COMPUTE, HIGH_QUALITY };
 int renderAlgorithm = POINTS;
 
 struct WindowData {
-    std::shared_ptr<BaseCamera> camera = nullptr;
+    std::shared_ptr<PerspectiveCamera> camera = nullptr;
     bool leftMousePressed = false;
     bool rightMousePressed = false;
     int width = WINDOW_WIDTH;
     int height = WINDOW_HEIGHT;
 };
 
-std::shared_ptr<BaseCamera> camera = nullptr;
+std::shared_ptr<PerspectiveCamera> camera = nullptr;
 WindowData windowData{};
 
 std::unique_ptr<Renderer> renderer = nullptr;
 std::shared_ptr<Renderer::Params> rendererParams = std::make_shared<Renderer::Params>();
+size_t pointsRendered;
 
 std::vector<glm::vec4> vertexPositions;
 std::vector<glm::u8vec4> vertexColors;
@@ -72,13 +73,13 @@ void loadPointCloud(std::string path) {
     } catch (const std::exception &e) {
         std::cout << "Point cloud " << path << " does not support vertex colors" << std::endl;
 
-        renderer->setPointCloud(vertexPositions);
+        renderer->setPointCloud(std::move(vertexPositions));
         hasColor = false;
 
         return;
     }
 
-    renderer->setPointCloud(vertexPositions, vertexColors);
+    renderer->setPointCloud(std::move(vertexPositions), std::move(vertexColors));
 }
 
 void updateRenderer() {
@@ -100,7 +101,8 @@ void updateRenderer() {
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
-    hasColor ? renderer->setPointCloud(vertexPositions, vertexColors) : renderer->setPointCloud(vertexPositions);
+    hasColor ? renderer->setPointCloud(std::move(vertexPositions), std::move(vertexColors))
+             : renderer->setPointCloud(std::move(vertexPositions));
 
     lastAlgorithm = renderAlgorithm;
 }
@@ -123,6 +125,9 @@ void RenderUI(ImGui::FileBrowser &fileBrowser) {
         if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
             updateRenderer();
         }
+
+        ImGui::Text("Max Pixel Error");
+        ImGui::SliderFloat("##maxPixelError", &(rendererParams->maxPixelError), 0.1f, 20.0f);
 
         ImGui::Text("Point Size");
         ImGui::SliderFloat("##pointSize", &(rendererParams->pointSize), 0.1f, 10.0f);
@@ -162,6 +167,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser) {
 
     if (ImGui::CollapsingHeader("3. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("Points Rendered: %d", pointsRendered);
     }
 
     ImGui::End();
@@ -343,7 +349,7 @@ int main(int argc, char **argv) {
 
         // Draw point cloud
         renderer->setWindowDimensions(windowData.width, windowData.height);
-        renderer->draw();
+        pointsRendered = renderer->draw();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

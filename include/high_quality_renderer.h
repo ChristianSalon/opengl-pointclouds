@@ -1,5 +1,8 @@
 #pragma once
 
+#include <queue>
+#include <unordered_map>
+
 #include <glm/vec4.hpp>
 
 #include "path_utils.h"
@@ -16,7 +19,16 @@ public:
     const std::filesystem::path QUAD_VS_PATH = getExecutableDirectory() / "shaders" / "high_quality_quad.vert ";
     const std::filesystem::path QUAD_FS_PATH = getExecutableDirectory() / "shaders" / "high_quality_quad.frag ";
 
+    struct OctreeNodeInfo {
+        size_t pointCount;
+        size_t offset;
+    };
+
 protected:
+    std::unordered_map<size_t, OctreeNodeInfo> mOctreeInfo;
+    std::vector<glm::vec4> mVertexPositions;
+    std::vector<glm::u8vec4> mVertexColors;
+
     GLuint mDepthProgram;
     GLuint mColorProgram;
     GLuint mResolveProgram;
@@ -28,8 +40,10 @@ protected:
     GLuint mDepthCs, mColorCs, mResolveCs, mHoleFillingCs, mEdlCs, mSecondResolveCs;
     GLuint mQuadVs, mQuadFs;
     
-    GLint mDepthProgramMvpLocation, mDepthProgramFramebufferSizeLocation;
-    GLint mColorProgramUseDefaultColorLocation, mColorProgramDefaultColorLocation, mColorProgramMvpLocation, mColorProgramFramebufferSizeLocation;
+    GLint mDepthProgramMvpLocation, mDepthProgramFramebufferSizeLocation, mDepthProgramVertexOffsetLoction,
+        mDepthProgramVertexCountLoction;
+    GLint mColorProgramUseDefaultColorLocation, mColorProgramDefaultColorLocation, mColorProgramMvpLocation,
+        mColorProgramFramebufferSizeLocation, mColorProgramVertexOffsetLoction, mColorProgramVertexCountLoction;
     GLint mResolveProgramFramebufferSizeLocation;
     GLint mHoleFillingProgramFramebufferSizeLocation, mHoleFillingProgramIterationLocation, mHoleFillingProgramInfluenceLocation;
     GLint mEdlProgramFramebufferSizeLocation, mEdlProgramLevelLocation, mEdlProgramShadingFactorLocation;
@@ -45,16 +59,17 @@ protected:
     GLuint mQuadVao;
 
 public:
-    HighQualityRenderer(std::shared_ptr<BaseCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
+    HighQualityRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~HighQualityRenderer() {}
 
     virtual void initialize() override;
     virtual void destroy() override;
-    virtual void draw() override;
+    virtual size_t draw() override;
 
     virtual void setWindowDimensions(int width, int height) override;
 
 protected:
+    void processOctreeVertices();
     void createFramebuffer();
     void createOutputTexture();
 };

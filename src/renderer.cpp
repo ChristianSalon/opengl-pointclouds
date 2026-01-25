@@ -32,9 +32,9 @@ void Renderer::setWindowDimensions(int width, int height) {
     mWindowHeight = height;
 }
 
-void Renderer::setPointCloud(const std::vector<glm::vec4> &vertexPositions, const std::vector<glm::u8vec4> &vertexColors) {
-    mVertexPositions = vertexPositions;
-    mVertexColors = vertexColors;
+void Renderer::setPointCloud(const std::vector<glm::vec4> &&vertexPositions, const std::vector<glm::u8vec4> &&vertexColors) {
+    OctreeBuilder builder;
+    mOctree = builder.build(std::move(vertexPositions), std::move(vertexColors));
 
     glFinish();
 
@@ -42,7 +42,7 @@ void Renderer::setPointCloud(const std::vector<glm::vec4> &vertexPositions, cons
     initialize();
 }
 
-void Renderer::setPointCloud(const std::vector<glm::vec4> &vertexPositions) {
+void Renderer::setPointCloud(const std::vector<glm::vec4> &&vertexPositions) {
     std::vector<glm::u8vec4> vertexColors{};
-    setPointCloud(vertexPositions, vertexColors);
+    setPointCloud(std::move(vertexPositions), std::move(vertexColors));
 }

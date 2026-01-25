@@ -21,6 +21,8 @@ uniform mat4 mvp;
 uniform ivec2 framebufferSize;
 uniform bool useDefaultColor;
 uniform uint defaultColor;
+uniform uint vertexOffset;
+uniform uint vertexCount;
 
 uint toPixelId(vec4 clip) {
     vec3 ndc = clip.xyz / clip.w;
@@ -37,7 +39,14 @@ uint toPixelId(vec4 clip) {
 }
 
 void main() {
+    // Id in octree node
     uint id = gl_GlobalInvocationID.x;
+    if (id >= vertexCount) {
+        return;
+    }
+
+    // Id in global SSBO
+    id += vertexOffset;
     if (id >= positions.length()) {
         return;
     }

@@ -21,6 +21,8 @@ void GlPointsRenderer::initialize() {
     glCreateBuffers(1, &mPositionVbo);
     glCreateBuffers(1, &mColorVbo);
 
+    processOctreeVertices();
+
     glNamedBufferStorage(mPositionVbo, mVertexPositions.size() * sizeof(glm::vec4), mVertexPositions.data(), 0);
     glNamedBufferStorage(mColorVbo, mVertexColors.size() * sizeof(glm::u8vec4), mVertexColors.data(), 0);
 
@@ -47,7 +49,7 @@ void GlPointsRenderer::destroy() {
     glDeleteBuffers(1, &mColorVbo);
 }
 
-void GlPointsRenderer::draw() {
+size_t GlPointsRenderer::draw() {
     // OpenGL clear
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -67,5 +69,80 @@ void GlPointsRenderer::draw() {
     glUniform1f(glGetUniformLocation(mProgram, "pointSize"), mParams->pointSize);
 
     glBindVertexArray(mVao);
-    glDrawArrays(GL_POINTS, 0, mVertexPositions.size());
+
+    // Factor which converts world space to screen space
+    float fovRad = glm::radians(mCamera->fov());
+    float sseFactor = mWindowHeight / (2.0f * tanf(fovRad * 0.5f));
+
+    size_t totalPointCount = 0;
+
+    // Traverse octree
+    std::queue<OctreeBuilder::OctreeNode *> open;
+    open.push(mOctree.get());
+
+    while (!open.empty()) {
+        OctreeBuilder::OctreeNode *node = open.front();
+        open.pop();
+
+        // Frustum culling
+        if (!mCamera->frustum().isCubeVisible(node->boundingCube.center, node->boundingCube.halfSize)) {
+            continue;
+        }
+
+        // Draw current node
+        if (node->pointCount > 0) {
+            totalPointCount += node->pointCount;
+            glDrawArrays(GL_POINTS, mOctreeInfo[node->id].offset, node->pointCount);
+        }
+
+        if (node->isLeaf) continue;
+
+        // Calculate screen space error
+        float distance = std::max(glm::distance(mCamera->position(), node->boundingCube.center), 0.01f);
+        float screenSpaceError = (node->boundingCube.halfSize / distance) * sseFactor;
+
+        // Draw children based on SSE
+        if (screenSpaceError > mParams->maxPixelError) {
+            for (auto &child : node->children) {
+                if (child) {
+                    open.push(child.get());
+                }
+            }
+        }
+    }
+
+    return totalPointCount;
+}
+
+void GlPointsRenderer::processOctreeVertices() {
+    mOctreeInfo.clear();
+    mVertexPositions.clear();
+    mVertexColors.clear();
+
+    size_t totalPointCount = 0;
+
+    std::queue<OctreeBuilder::OctreeNode *> open;
+    open.push(mOctree.get());
+
+    while (!open.empty()) {
+        OctreeBuilder::OctreeNode *node = open.front();
+        open.pop();
+
+        mOctreeInfo.insert({node->id, OctreeNodeInfo{node->pointCount, totalPointCount}});
+        mVertexPositions.insert(mVertexPositions.end(), std::make_move_iterator(node->positions.begin()), std::make_move_iterator(node->positions.end()));
+        mVertexColors.insert(mVertexColors.end(), std::make_move_iterator(node->colors.begin()), std::make_move_iterator(node->colors.end()));
+
+        node->positions.clear();
+        node->colors.clear();
+
+        totalPointCount += node->pointCount;
+
+        if (node->isLeaf) continue;
+
+        for (auto &child : node->children) {
+            if (child) {
+                open.push(child.get());
+            }
+        }
+    }
 }

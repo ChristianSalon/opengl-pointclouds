@@ -20,6 +20,7 @@ set(SOURCES
     ${SRC_PATH}/gl_points_renderer.cpp
     ${SRC_PATH}/basic_compute_renderer.cpp
     ${SRC_PATH}/high_quality_renderer.cpp
+    ${SRC_PATH}/octree_builder.cpp
 )
 
 # executable header files
@@ -31,6 +32,7 @@ set(HEADERS
     ${INCLUDES_PATH}/gl_points_renderer.h
     ${INCLUDES_PATH}/basic_compute_renderer.h
     ${INCLUDES_PATH}/high_quality_renderer.h
+    ${INCLUDES_PATH}/octree_builder.h
 )
 
 # executable glsl shaders

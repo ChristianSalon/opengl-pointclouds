@@ -33,6 +33,8 @@ void BasicComputeRenderer::initialize() {
     mRenderProgramDefaultColorLocation = glGetUniformLocation(mRenderProgram, "defaultColor");
     mRenderProgramMvpLocation = glGetUniformLocation(mRenderProgram, "mvp");
     mRenderProgramFramebufferSizeLocation = glGetUniformLocation(mRenderProgram, "framebufferSize");
+    mRenderProgramVertexOffsetLoction = glGetUniformLocation(mRenderProgram, "vertexOffset");
+    mRenderProgramVertexCountLoction = glGetUniformLocation(mRenderProgram, "vertexCount");
 
     mHoleFillingProgramFramebufferSizeLocation = glGetUniformLocation(mHoleFillingProgram, "framebufferSize");
     mHoleFillingProgramIterationLocation = glGetUniformLocation(mHoleFillingProgram, "iteration");
@@ -45,6 +47,8 @@ void BasicComputeRenderer::initialize() {
     mResolveProgramFramebufferSizeLocation = glGetUniformLocation(mResolveProgram, "framebufferSize");
     mResolveProgramEdlShadingStrengthLocation = glGetUniformLocation(mResolveProgram, "edlShadingStrength");
     mResolveProgramUseEdlLocation = glGetUniformLocation(mResolveProgram, "useEdl");
+
+    processOctreeVertices();
 
     glCreateBuffers(1, &mPointsSsbo);
     glNamedBufferStorage(mPointsSsbo, mVertexPositions.size() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
@@ -88,7 +92,7 @@ void BasicComputeRenderer::destroy() {
 
 }
 
-void BasicComputeRenderer::draw() {
+size_t BasicComputeRenderer::draw() {
     // Clear screen
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -127,7 +131,50 @@ void BasicComputeRenderer::draw() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mColorSsbo);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFirstFramebufferSsbo);
 
-    glDispatchCompute((mVertexPositions.size() / 256) + 1, 1, 1);
+    // Factor which converts world space to screen space
+    float fovRad = glm::radians(mCamera->fov());
+    float sseFactor = mWindowHeight / (2.0f * tanf(fovRad * 0.5f));
+
+    size_t totalPointCount = 0;
+
+    // Traverse octree
+    std::queue<OctreeBuilder::OctreeNode *> open;
+    open.push(mOctree.get());
+
+    while (!open.empty()) {
+        OctreeBuilder::OctreeNode *node = open.front();
+        open.pop();
+
+        // Frustum culling
+        if (!mCamera->frustum().isCubeVisible(node->boundingCube.center, node->boundingCube.halfSize)) {
+            continue;
+        }
+
+        // Draw current node
+        if (node->pointCount > 0) {
+            totalPointCount += node->pointCount;
+
+            glProgramUniform1ui(mRenderProgram, mRenderProgramVertexOffsetLoction, mOctreeInfo[node->id].offset);
+            glProgramUniform1ui(mRenderProgram, mRenderProgramVertexCountLoction, mOctreeInfo[node->id].pointCount);
+            glDispatchCompute((node->pointCount / 256) + 1, 1, 1);
+        }
+
+        if (node->isLeaf) continue;
+
+        // Calculate screen space error
+        float distance = std::max(glm::distance(mCamera->position(), node->boundingCube.center), 0.01f);
+        float screenSpaceError = (node->boundingCube.halfSize / distance) * sseFactor;
+
+        // Draw children based on SSE
+        if (screenSpaceError > mParams->maxPixelError) {
+            for (auto &child : node->children) {
+                if (child) {
+                    open.push(child.get());
+                }
+            }
+        }
+    }
+
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
     // Hole filling pass
@@ -191,6 +238,8 @@ void BasicComputeRenderer::draw() {
     glBindTextureUnit(0, mOutputTexture);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    return totalPointCount;
 }
 
 void BasicComputeRenderer::createFramebuffer() {
@@ -235,4 +284,37 @@ void BasicComputeRenderer::setWindowDimensions(int width, int height) {
 
     createFramebuffer();
     createOutputTexture();
+}
+
+void BasicComputeRenderer::processOctreeVertices() {
+    mOctreeInfo.clear();
+    mVertexPositions.clear();
+    mVertexColors.clear();
+
+    size_t totalPointCount = 0;
+
+    std::queue<OctreeBuilder::OctreeNode *> open;
+    open.push(mOctree.get());
+
+    while (!open.empty()) {
+        OctreeBuilder::OctreeNode *node = open.front();
+        open.pop();
+
+        mOctreeInfo.insert({node->id, OctreeNodeInfo{node->pointCount, totalPointCount}});
+        mVertexPositions.insert(mVertexPositions.end(), std::make_move_iterator(node->positions.begin()), std::make_move_iterator(node->positions.end()));
+        mVertexColors.insert(mVertexColors.end(), std::make_move_iterator(node->colors.begin()), std::make_move_iterator(node->colors.end()));
+
+        node->positions.clear();
+        node->colors.clear();
+
+        totalPointCount += node->pointCount;
+
+        if (node->isLeaf) continue;
+
+        for (auto &child : node->children) {
+            if (child) {
+                open.push(child.get());
+            }
+        }
+    }
 }

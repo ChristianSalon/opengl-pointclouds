@@ -32,4 +32,13 @@ public:
     PerspectiveCamera(glm::vec3 position, float fov, float aspectRatio, float nearPlane, float farPlane);
 
     void setProjection(float fov, float aspectRatio, float nearPlane, float farPlane);
+
+    inline float fov() const { return _fov; }
+    inline float aspectRatio() const { return _aspectRatio; }
+    inline float near() const { return _nearPlane; }
+    inline float far() const { return _farPlane; }
+
+protected:
+    virtual void _setViewMatrix() override;
+    Frustum _getFrustum() const;
 };

@@ -1,3 +1,4 @@
+#include <iostream>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "high_quality_renderer.h"
@@ -39,11 +40,15 @@ void HighQualityRenderer::initialize() {
 
     mDepthProgramMvpLocation = glGetUniformLocation(mDepthProgram, "mvp");
     mDepthProgramFramebufferSizeLocation = glGetUniformLocation(mDepthProgram, "framebufferSize");
+    mDepthProgramVertexOffsetLoction = glGetUniformLocation(mDepthProgram, "vertexOffset");
+    mDepthProgramVertexCountLoction = glGetUniformLocation(mDepthProgram, "vertexCount");
 
     mColorProgramUseDefaultColorLocation = glGetUniformLocation(mColorProgram, "useDefaultColor");
     mColorProgramDefaultColorLocation = glGetUniformLocation(mColorProgram, "defaultColor");
     mColorProgramMvpLocation = glGetUniformLocation(mColorProgram, "mvp");
     mColorProgramFramebufferSizeLocation = glGetUniformLocation(mColorProgram, "framebufferSize");
+    mColorProgramVertexOffsetLoction = glGetUniformLocation(mColorProgram, "vertexOffset");
+    mColorProgramVertexCountLoction = glGetUniformLocation(mColorProgram, "vertexCount");
 
     mResolveProgramFramebufferSizeLocation = glGetUniformLocation(mResolveProgram, "framebufferSize");
 
@@ -59,7 +64,7 @@ void HighQualityRenderer::initialize() {
     mSecondResolveProgramEdlShadingStrengthLocation= glGetUniformLocation(mSecondResolveProgram, "edlShadingStrength");
     mSecondResolveProgramUseEdlLocation = glGetUniformLocation(mSecondResolveProgram, "useEdl");
 
-    glCreateVertexArrays(1, &mQuadVao);
+    processOctreeVertices();
 
     glCreateBuffers(1, &mPointsSsbo);
     glNamedBufferStorage(mPointsSsbo, mVertexPositions.size() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
@@ -68,6 +73,8 @@ void HighQualityRenderer::initialize() {
     glCreateBuffers(1, &mColorSsbo);
     glNamedBufferStorage(mColorSsbo, mVertexColors.size() * sizeof(glm::u8vec4), nullptr, GL_DYNAMIC_STORAGE_BIT);
     glNamedBufferSubData(mColorSsbo, 0, mVertexColors.size() * sizeof(glm::u8vec4), mVertexColors.data());
+
+    glCreateVertexArrays(1, &mQuadVao);
 
     createFramebuffer();
     createOutputTexture();
@@ -107,7 +114,7 @@ void HighQualityRenderer::destroy() {
     glDeleteVertexArrays(1, &mQuadVao);
 }
 
-void HighQualityRenderer::draw() {
+size_t HighQualityRenderer::draw() {
     // Clear screen
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -141,33 +148,114 @@ void HighQualityRenderer::draw() {
 
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-    // Depth pass
+    // Factor which converts world space to screen space
+    float fovRad = glm::radians(mCamera->fov());
+    float sseFactor = mWindowHeight / (2.0f * tanf(fovRad * 0.5f));
+
+    size_t totalPointCount = 0;
     glm::mat4 mvp = mCamera->projectionMatrix() * mCamera->viewMatrix();
 
-    glUseProgram(mDepthProgram);
-    glProgramUniformMatrix4fv(mDepthProgram, mDepthProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
-    glProgramUniform2i(mDepthProgram, mDepthProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
+    // Depth pass
+    {
+        glUseProgram(mDepthProgram);
+        glProgramUniformMatrix4fv(mDepthProgram, mDepthProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
+        glProgramUniform2i(mDepthProgram, mDepthProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstDepthSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mFirstDepthSsbo);
 
-    glDispatchCompute((mVertexPositions.size() / 256) + 1, 1, 1);
+        // Traverse octree
+        std::queue<OctreeBuilder::OctreeNode *> open;
+        open.push(mOctree.get());
+
+        while (!open.empty()) {
+            OctreeBuilder::OctreeNode *node = open.front();
+            open.pop();
+
+            // Frustum culling
+            if (!mCamera->frustum().isCubeVisible(node->boundingCube.center, node->boundingCube.halfSize)) {
+                continue;
+            }
+
+            // Draw current node
+            if (node->pointCount > 0) {
+                totalPointCount += node->pointCount;
+
+                glProgramUniform1ui(mDepthProgram, mDepthProgramVertexOffsetLoction, mOctreeInfo[node->id].offset);
+                glProgramUniform1ui(mDepthProgram, mDepthProgramVertexCountLoction, mOctreeInfo[node->id].pointCount);
+                glDispatchCompute((node->pointCount / 256) + 1, 1, 1);
+            }
+
+            if (node->isLeaf) continue;
+
+            // Calculate screen space error
+            float distance = std::max(glm::distance(mCamera->position(), node->boundingCube.center), 0.01f);
+            float screenSpaceError = (node->boundingCube.halfSize / distance) * sseFactor;
+
+            // Draw children based on SSE
+            if (screenSpaceError > mParams->maxPixelError) {
+                for (auto &child : node->children) {
+                    if (child) {
+                        open.push(child.get());
+                    }
+                }
+            }
+        }
+    }
+
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
     // Color pass
-    glUseProgram(mColorProgram);
-    glProgramUniformMatrix4fv(mColorProgram, mColorProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
-    glProgramUniform2i(mColorProgram, mColorProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
-    glProgramUniform1ui64ARB(mColorProgram, mColorProgramUseDefaultColorLocation, mParams->useDefaultColor);
-    glProgramUniform1ui64ARB(mColorProgram, mColorProgramDefaultColorLocation, defaultColor);
+    {
+        glUseProgram(mColorProgram);
+        glProgramUniformMatrix4fv(mColorProgram, mColorProgramMvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
+        glProgramUniform2i(mColorProgram, mColorProgramFramebufferSizeLocation, mWindowWidth, mWindowHeight);
+        glProgramUniform1ui(mColorProgram, mColorProgramUseDefaultColorLocation, mParams->useDefaultColor);
+        glProgramUniform1ui64ARB(mColorProgram, mColorProgramDefaultColorLocation, defaultColor);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mColorSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFramebufferSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mFirstDepthSsbo);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, mFallbackSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mPointsSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mColorSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, mFramebufferSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mFirstDepthSsbo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, mFallbackSsbo);
 
-    glDispatchCompute((mVertexPositions.size() / 256) + 1, 1, 1);
+        // Traverse octree
+        std::queue<OctreeBuilder::OctreeNode *> open;
+        open.push(mOctree.get());
+
+        while (!open.empty()) {
+            OctreeBuilder::OctreeNode *node = open.front();
+            open.pop();
+
+            // Frustum culling
+            if (!mCamera->frustum().isCubeVisible(node->boundingCube.center, node->boundingCube.halfSize)) {
+                continue;
+            }
+
+            // Draw current node
+            if (node->pointCount > 0) {
+                glProgramUniform1ui(mColorProgram, mColorProgramVertexOffsetLoction, mOctreeInfo[node->id].offset);
+                glProgramUniform1ui(mColorProgram, mColorProgramVertexCountLoction, mOctreeInfo[node->id].pointCount);
+                glDispatchCompute((node->pointCount / 256) + 1, 1, 1);
+            }
+
+            if (node->isLeaf) continue;
+
+            // Calculate screen space error
+            float distance = std::max(glm::distance(mCamera->position(), node->boundingCube.center), 0.01f);
+            float screenSpaceError = (node->boundingCube.halfSize / distance) * sseFactor;
+
+            // Draw children based on SSE
+            if (screenSpaceError > mParams->maxPixelError) {
+                for (auto &child : node->children) {
+                    if (child) {
+                        open.push(child.get());
+                    }
+                }
+            }
+        }
+    }
+
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
     // Resolve pass
@@ -246,6 +334,8 @@ void HighQualityRenderer::draw() {
     glBindTextureUnit(0, mFirstOutputTexture);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    return totalPointCount;
 }
 
 void HighQualityRenderer::createFramebuffer() {
@@ -305,4 +395,37 @@ void HighQualityRenderer::setWindowDimensions(int width, int height) {
 
     createFramebuffer();
     createOutputTexture();
+}
+
+void HighQualityRenderer::processOctreeVertices() {
+    mOctreeInfo.clear();
+    mVertexPositions.clear();
+    mVertexColors.clear();
+
+    size_t totalPointCount = 0;
+
+    std::queue<OctreeBuilder::OctreeNode *> open;
+    open.push(mOctree.get());
+
+    while (!open.empty()) {
+        OctreeBuilder::OctreeNode *node = open.front();
+        open.pop();
+
+        mOctreeInfo.insert({node->id, OctreeNodeInfo{node->pointCount, totalPointCount}});
+        mVertexPositions.insert(mVertexPositions.end(), std::make_move_iterator(node->positions.begin()), std::make_move_iterator(node->positions.end()));
+        mVertexColors.insert(mVertexColors.end(), std::make_move_iterator(node->colors.begin()), std::make_move_iterator(node->colors.end()));
+
+        node->positions.clear();
+        node->colors.clear();
+
+        totalPointCount += node->pointCount;
+
+        if (node->isLeaf) continue;
+
+        for (auto &child : node->children) {
+            if (child) {
+                open.push(child.get());
+            }
+        }
+    }
 }
