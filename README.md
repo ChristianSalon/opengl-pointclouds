@@ -1,1 +1,1 @@
-# opengl-terrain
+# opengl-pointclouds
