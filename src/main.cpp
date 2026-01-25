@@ -21,6 +21,7 @@
 #include "gl_points_renderer.h"
 #include "basic_compute_renderer.h"
 #include "high_quality_renderer.h"
+#include "octree_builder.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
@@ -45,17 +46,16 @@ std::unique_ptr<Renderer> renderer = nullptr;
 std::shared_ptr<Renderer::Params> rendererParams = std::make_shared<Renderer::Params>();
 size_t pointsRendered;
 
-std::vector<glm::vec4> vertexPositions;
-std::vector<glm::u8vec4> vertexColors;
+std::shared_ptr<OctreeBuilder::OctreeNode> octree = nullptr;
 bool hasColor = false;
 
 void loadPointCloud(std::string path) {
     happly::PLYData pointCloud{path};
+    std::vector<glm::vec4> vertexPositions;
+    std::vector<glm::u8vec4> vertexColors;
 
     // Load positions
     std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
-
-    vertexPositions.clear();
     for (const std::array<double, 3> &vertex : vPos) {
         vertexPositions.push_back(glm::vec4(vertex[0], vertex[1], vertex[2], 1.0f));
     }
@@ -63,8 +63,6 @@ void loadPointCloud(std::string path) {
     // Try to load color
     try {
         std::vector<std::array<unsigned char, 3>> vCol = pointCloud.getVertexColors();
-
-        vertexColors.clear();
         for (const std::array<unsigned char, 3> &color : vCol) {
             vertexColors.push_back(glm::u8vec4(color[0], color[1], color[2], 1.0f));
         }
@@ -72,14 +70,12 @@ void loadPointCloud(std::string path) {
         hasColor = true;
     } catch (const std::exception &e) {
         std::cout << "Point cloud " << path << " does not support vertex colors" << std::endl;
-
-        renderer->setPointCloud(std::move(vertexPositions));
         hasColor = false;
-
-        return;
     }
 
-    renderer->setPointCloud(std::move(vertexPositions), std::move(vertexColors));
+    OctreeBuilder octreeBuilder;
+    octree = octreeBuilder.build(std::move(vertexPositions), std::move(vertexColors));
+    renderer->setPointCloud(octree);
 }
 
 void updateRenderer() {
@@ -101,8 +97,7 @@ void updateRenderer() {
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
-    hasColor ? renderer->setPointCloud(std::move(vertexPositions), std::move(vertexColors))
-             : renderer->setPointCloud(std::move(vertexPositions));
+    renderer->setPointCloud(octree);
 
     lastAlgorithm = renderAlgorithm;
 }
@@ -127,7 +122,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser) {
         }
 
         ImGui::Text("Max Pixel Error");
-        ImGui::SliderFloat("##maxPixelError", &(rendererParams->maxPixelError), 0.1f, 20.0f);
+        ImGui::SliderFloat("##maxPixelError", &(rendererParams->maxPixelError), 0.0f, 20.0f);
 
         ImGui::Text("Point Size");
         ImGui::SliderFloat("##pointSize", &(rendererParams->pointSize), 0.1f, 10.0f);
@@ -146,7 +141,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser) {
         }
 
         ImGui::Text("Hole Filling Iterations");
-        ImGui::SliderInt("##holeFillingIterations", &(rendererParams->holeFillingIterations), 1, 4);
+        ImGui::SliderInt("##holeFillingIterations", &(rendererParams->holeFillingIterations), 1, 20);
 
         ImGui::Text("Hole Filling Influence");
         ImGui::SliderFloat("##holeFillingInfluence", &(rendererParams->holeFillingInfluence), 0.0001f, 1.0f);

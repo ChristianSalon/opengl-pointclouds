@@ -412,11 +412,8 @@ void HighQualityRenderer::processOctreeVertices() {
         open.pop();
 
         mOctreeInfo.insert({node->id, OctreeNodeInfo{node->pointCount, totalPointCount}});
-        mVertexPositions.insert(mVertexPositions.end(), std::make_move_iterator(node->positions.begin()), std::make_move_iterator(node->positions.end()));
-        mVertexColors.insert(mVertexColors.end(), std::make_move_iterator(node->colors.begin()), std::make_move_iterator(node->colors.end()));
-
-        node->positions.clear();
-        node->colors.clear();
+        mVertexPositions.insert(mVertexPositions.end(), node->positions.begin(), node->positions.end());
+        mVertexColors.insert(mVertexColors.end(), node->colors.begin(), node->colors.end());
 
         totalPointCount += node->pointCount;
 

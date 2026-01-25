@@ -33,8 +33,7 @@ protected:
     int mWindowWidth{0};
     int mWindowHeight{0};
 
-    std::unique_ptr<OctreeBuilder::OctreeNode> mOctree;
-
+    std::shared_ptr<OctreeBuilder::OctreeNode> mOctree;
     std::shared_ptr <Params> mParams{nullptr};
 
 public:
@@ -47,8 +46,7 @@ public:
 
     virtual void setWindowDimensions(int width, int height);
 
-    virtual void setPointCloud(const std::vector<glm::vec4> &&vertexPositions, const std::vector<glm::u8vec4> &&vertexColors);
-    virtual void setPointCloud(const std::vector<glm::vec4> &&vertexPositions);
+    virtual void setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree);
 
 protected:
     static GLuint createShader(std::filesystem::path path, GLenum type);
