@@ -26,6 +26,9 @@ public:
         bool isLeaf = true;
     };
 
+protected:
+    size_t mNextId{0};
+
 public:
     OctreeBuilder() {}
     ~OctreeBuilder() {}

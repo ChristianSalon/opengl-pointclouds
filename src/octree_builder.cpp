@@ -7,6 +7,8 @@ std::unique_ptr<OctreeBuilder::OctreeNode> OctreeBuilder::build(const std::vecto
                                             std::vector<glm::u8vec4>{});
     }
 
+    mNextId = 0;
+
     std::vector<glm::vec4> vertexPositions = std::move(positions);
     std::vector<glm::u8vec4> vertexColors = std::move(colors);
 
@@ -86,7 +88,7 @@ std::unique_ptr<OctreeBuilder::OctreeNode> OctreeBuilder::buildNode(size_t id,
     for (int i = 0; i < 8; i++) {
         if (!childPositions[i].empty()) {
             Cube childCube{getChildCenter(center, childHalfSize, i), childHalfSize};
-            node->children[i] = buildNode(++id, childCube, childPositions[i], childColors[i]);
+            node->children[i] = buildNode(++mNextId, childCube, childPositions[i], childColors[i]);
         }
     }
 
