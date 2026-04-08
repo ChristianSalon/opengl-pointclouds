@@ -20,6 +20,8 @@ set(SOURCES
     ${SRC_PATH}/gl_points_renderer.cpp
     ${SRC_PATH}/basic_compute_renderer.cpp
     ${SRC_PATH}/high_quality_renderer.cpp
+    ${SRC_PATH}/triangle_mesh_renderer.cpp
+    ${SRC_PATH}/poisson_reconstruction_renderer.cpp
     ${SRC_PATH}/octree_builder.cpp
 )
 
@@ -32,6 +34,8 @@ set(HEADERS
     ${INCLUDES_PATH}/gl_points_renderer.h
     ${INCLUDES_PATH}/basic_compute_renderer.h
     ${INCLUDES_PATH}/high_quality_renderer.h
+    ${INCLUDES_PATH}/triangle_mesh_renderer.h
+    ${INCLUDES_PATH}/poisson_reconstruction_renderer.h
     ${INCLUDES_PATH}/octree_builder.h
 )
 
@@ -53,6 +57,8 @@ set(SHADERS
     ${SHADERS_PATH}/high_quality_second_resolve.comp
     ${SHADERS_PATH}/high_quality_quad.vert
     ${SHADERS_PATH}/high_quality_quad.frag
+    ${SHADERS_PATH}/triangle_mesh.vert
+    ${SHADERS_PATH}/triangle_mesh.frag
 )
 
 # imgui source files
@@ -96,9 +102,13 @@ add_subdirectory(${LIBS_PATH}/glm)
 # happly - parsing PLY files
 target_include_directories(${EXECUTABLE_NAME} PUBLIC ${LIBS_PATH}/happly)
 
+# cgal
+find_package(CGAL REQUIRED)
+find_package(Eigen3 REQUIRED)
+
 # executable dependencies
 target_include_directories(${EXECUTABLE_NAME} PRIVATE ${INCLUDES_PATH})
-target_link_libraries(${EXECUTABLE_NAME} PRIVATE glad glfw imgui glm::glm opengl32 gdi32 user32 shell32 kernel32)
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE glad glfw imgui glm::glm CGAL::CGAL Eigen3::Eigen opengl32 gdi32 user32 shell32 kernel32)
 
 # copy resources to executable directory
 message(STATUS "Copying resources to build directory")

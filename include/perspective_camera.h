@@ -35,8 +35,8 @@ public:
 
     inline float fov() const { return _fov; }
     inline float aspectRatio() const { return _aspectRatio; }
-    inline float near() const { return _nearPlane; }
-    inline float far() const { return _farPlane; }
+    inline float getNear() const { return _nearPlane; }
+    inline float getFar() const { return _farPlane; }
 
 protected:
     virtual void _setViewMatrix() override;

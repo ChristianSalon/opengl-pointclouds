@@ -21,6 +21,8 @@
 #include "gl_points_renderer.h"
 #include "basic_compute_renderer.h"
 #include "high_quality_renderer.h"
+#include "triangle_mesh_renderer.h"
+#include "poisson_reconstruction_renderer.h"
 #include "octree_builder.h"
 
 constexpr float WINDOW_WIDTH = 1024;
@@ -28,8 +30,8 @@ constexpr float WINDOW_HEIGHT = 768;
 constexpr float MOVE_SPEED = 0.005f;
 constexpr float ROTATE_SPEED = 0.4f;
 
-enum RenderAlgorithm { POINTS, BASIC_COMPUTE, HIGH_QUALITY };
-int renderAlgorithm = POINTS;
+enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON };
+int renderAlgorithm = SIMPLE_POINTS;
 
 struct WindowData {
     std::shared_ptr<PerspectiveCamera> camera = nullptr;
@@ -48,38 +50,70 @@ size_t pointsRendered;
 
 std::shared_ptr<OctreeBuilder::OctreeNode> octree = nullptr;
 bool hasColor = false;
+bool isPointCloudSelected = false;
+std::string pointCloudPath = "";
 
 void loadPointCloud(std::string path) {
-    happly::PLYData pointCloud{path};
-    std::vector<glm::vec4> vertexPositions;
-    std::vector<glm::u8vec4> vertexColors;
+    if (renderAlgorithm == TRIANGLE_MESH) {
+        // Let CGAL handle loading
+        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer*>(renderer.get())) {
+            meshRenderer->setPointCloud(path);
+            hasColor = meshRenderer->hasColor();
+        }
+    } else if (renderAlgorithm == POISSON) {
+        // Let CGAL handle loading
+        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+            poissonRenderer->setPointCloud(path);
+            poissonRenderer->reconstruct();
 
-    // Load positions
-    std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
-    for (const std::array<double, 3> &vertex : vPos) {
-        vertexPositions.push_back(glm::vec4(vertex[0], vertex[1], vertex[2], 1.0f));
-    }
+            hasColor = poissonRenderer->hasColor();
+        }
+    } else {
+        // Load using happly
+        happly::PLYData pointCloud{path};
+        std::vector<glm::vec4> vertexPositions;
+        std::vector<glm::u8vec4> vertexColors;
 
-    // Try to load color
-    try {
-        std::vector<std::array<unsigned char, 3>> vCol = pointCloud.getVertexColors();
-        for (const std::array<unsigned char, 3> &color : vCol) {
-            vertexColors.push_back(glm::u8vec4(color[0], color[1], color[2], 1.0f));
+        // Load positions
+        std::vector<std::array<double, 3>> vPos = pointCloud.getVertexPositions();
+        for (const std::array<double, 3> &vertex : vPos) {
+            vertexPositions.push_back(glm::vec4(vertex[0], vertex[1], vertex[2], 1.0f));
         }
 
-        hasColor = true;
-    } catch (const std::exception &e) {
-        std::cout << "Point cloud " << path << " does not support vertex colors" << std::endl;
-        hasColor = false;
+        // Try to load color
+        try {
+            std::vector<std::array<unsigned char, 3>> vCol = pointCloud.getVertexColors();
+            for (const std::array<unsigned char, 3> &color : vCol) {
+                vertexColors.push_back(glm::u8vec4(color[0], color[1], color[2], 1.0f));
+            }
+
+            hasColor = true;
+        } catch (const std::exception &e) {
+            std::cout << "Point cloud " << path << " does not support vertex colors" << std::endl;
+            hasColor = false;
+        }
+
+        OctreeBuilder octreeBuilder;
+        octree = octreeBuilder.build(std::move(vertexPositions), std::move(vertexColors));
+        renderer->setPointCloud(octree);
     }
 
-    OctreeBuilder octreeBuilder;
-    octree = octreeBuilder.build(std::move(vertexPositions), std::move(vertexColors));
-    renderer->setPointCloud(octree);
+    pointCloudPath = path;
+    isPointCloudSelected = true;
+}
+
+void exportMesh(std::string path) {
+    if (renderAlgorithm == POISSON) {
+        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+            poissonRenderer->exportMesh(path);
+        }
+    } else {
+        throw std::runtime_error("Current renderer does not support exporting triangle mesh");
+    }
 }
 
 void updateRenderer() {
-    static int lastAlgorithm = POINTS;
+    static int lastAlgorithm = SIMPLE_POINTS;
 
     if (renderAlgorithm == lastAlgorithm) return;
 
@@ -88,81 +122,107 @@ void updateRenderer() {
     renderer->destroy();
     renderer.reset();
 
-    if (renderAlgorithm == POINTS) {
+    if (renderAlgorithm == SIMPLE_POINTS) {
         renderer = std::make_unique<GlPointsRenderer>(camera, rendererParams);
+        renderer->setPointCloud(octree);
     } else if (renderAlgorithm == BASIC_COMPUTE) {
         renderer = std::make_unique<BasicComputeRenderer>(camera, rendererParams);
-    } else {
+        renderer->setPointCloud(octree);
+    } else if (renderAlgorithm == HIGH_QUALITY) {
         renderer = std::make_unique<HighQualityRenderer>(camera, rendererParams);
+        renderer->setPointCloud(octree);
+    } else if (renderAlgorithm == TRIANGLE_MESH) {
+        renderer = std::make_unique<TriangleMeshRenderer>(camera, rendererParams);
+        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer*>(renderer.get())) {
+            meshRenderer->initialize();
+            meshRenderer->setPointCloud(pointCloudPath);
+        }
+    } else if (renderAlgorithm == POISSON) {
+        renderer = std::make_unique<PoissonReconstructionRenderer>(camera, rendererParams);
+        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+            poissonRenderer->initialize();
+            poissonRenderer->setPointCloud(pointCloudPath);
+            poissonRenderer->reconstruct();
+        }
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
-    renderer->setPointCloud(octree);
 
     lastAlgorithm = renderAlgorithm;
 }
 
-void RenderUI(ImGui::FileBrowser &fileBrowser) {
+void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrowser) {
     ImGui::SetNextWindowPos(ImVec2(0, 0));
 
     ImGui::Begin("Side Panel");
 
-    if (ImGui::CollapsingHeader("1. Load Data", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("1. Global Setting", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Button("Select .ply file", ImVec2(-1, 0))) {
             fileBrowser.Open();
         }
+
+        if (isPointCloudSelected) {
+            ImGui::Text("Algorithm");
+            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson"};
+            if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
+                updateRenderer();
+            }
+        
+            ImGui::Text("Point Color");
+            ImGui::ColorEdit3("##pointColor", glm::value_ptr(rendererParams->pointColor));
+
+            if (hasColor) {
+                ImGui::Checkbox("Use Default Color", &(rendererParams->useDefaultColor));
+            } else {
+                bool checked = true;
+
+                ImGui::BeginDisabled();
+                ImGui::Checkbox("Use Default Color", &checked);
+                ImGui::EndDisabled();
+            }
+        }
     }
 
-    if (ImGui::CollapsingHeader("2. Render Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Algorithm");
+    if (isPointCloudSelected) {
+        if (ImGui::CollapsingHeader("2. Point Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Max Pixel Error");
+            ImGui::SliderFloat("##maxPixelError", &(rendererParams->maxPixelError), 0.0f, 20.0f);
 
-        const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality"};
-        if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
-            updateRenderer();
+            ImGui::Text("Point Size");
+            ImGui::SliderFloat("##pointSize", &(rendererParams->pointSize), 0.1f, 10.0f);
+
+            ImGui::Text("Hole Filling Iterations");
+            ImGui::SliderInt("##holeFillingIterations", &(rendererParams->holeFillingIterations), 1, 20);
+
+            ImGui::Text("Hole Filling Influence");
+            ImGui::SliderFloat("##holeFillingInfluence", &(rendererParams->holeFillingInfluence), 0.0001f, 1.0f);
+
+            ImGui::Checkbox("Enable Hole Filling", &(rendererParams->enableHoleFilling));
+
+            ImGui::Text("EDL Levels");
+            ImGui::SliderInt("##edlLevels", &(rendererParams->edlLevels), 1, 15);
+
+            ImGui::Text("EDL Shading Factor");
+            ImGui::SliderFloat("##edlShadingFactor", &(rendererParams->shadingFactor), 0.0f, 5.0f);
+
+            ImGui::Text("EDL Shading Strength");
+            ImGui::SliderFloat("##edlShadingStrength", &(rendererParams->shadingStrength), 0.0f, 2.0f);
+
+            ImGui::Checkbox("Enable EDL", &(rendererParams->enableEdl));
         }
 
-        ImGui::Text("Max Pixel Error");
-        ImGui::SliderFloat("##maxPixelError", &(rendererParams->maxPixelError), 0.0f, 20.0f);
-
-        ImGui::Text("Point Size");
-        ImGui::SliderFloat("##pointSize", &(rendererParams->pointSize), 0.1f, 10.0f);
-
-        ImGui::Text("Point Color");
-        ImGui::ColorEdit3("##pointColor", glm::value_ptr(rendererParams->pointColor));
-
-        if (hasColor) {
-            ImGui::Checkbox("Use Default Color", &(rendererParams->useDefaultColor));
-        } else {
-            bool checked = true;
-
-            ImGui::BeginDisabled();
-            ImGui::Checkbox("Use Default Color", &checked);
-            ImGui::EndDisabled();
+        if (ImGui::CollapsingHeader("3. Reconstruction Settings", ImGuiTreeNodeFlags_DefaultOpen)) {            
+            if (ImGui::Button("Export Mesh to .ply", ImVec2(-1, 0))) {
+                fileSaveBrowser.Open();
+            }
+            
+            ImGui::Text("TODO");
         }
 
-        ImGui::Text("Hole Filling Iterations");
-        ImGui::SliderInt("##holeFillingIterations", &(rendererParams->holeFillingIterations), 1, 20);
-
-        ImGui::Text("Hole Filling Influence");
-        ImGui::SliderFloat("##holeFillingInfluence", &(rendererParams->holeFillingInfluence), 0.0001f, 1.0f);
-
-        ImGui::Checkbox("Enable Hole Filling", &(rendererParams->enableHoleFilling));
-
-        ImGui::Text("EDL Levels");
-        ImGui::SliderInt("##edlLevels", &(rendererParams->edlLevels), 1, 15);
-
-        ImGui::Text("EDL Shading Factor");
-        ImGui::SliderFloat("##edlShadingFactor", &(rendererParams->shadingFactor), 0.0f, 5.0f);
-
-        ImGui::Text("EDL Shading Strength");
-        ImGui::SliderFloat("##edlShadingStrength", &(rendererParams->shadingStrength), 0.0f, 2.0f);
-
-        ImGui::Checkbox("Enable EDL", &(rendererParams->enableEdl));
-    }
-
-    if (ImGui::CollapsingHeader("3. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("Points Rendered: %d", pointsRendered);
+        if (ImGui::CollapsingHeader("4. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+            ImGui::Text("Elements Rendered: %d", pointsRendered);
+        }
     }
 
     ImGui::End();
@@ -172,26 +232,17 @@ int main(int argc, char **argv) {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
 
     // Process arguments
-    std::string plyPath;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0) {
             // Show help message
-            std::cout << "./opengl-pointclouds ply_file_path [-h]" << std::endl;
-            std::cout << "ply_file_path: Path to .ply file used for rendering" << std::endl;
+            std::cout << "./opengl-pointclouds [-h]" << std::endl;
             std::cout << "-h: Show help message" << std::endl;
 
             return 0;
-        } else if (plyPath.empty()) {
-            plyPath = argv[i];
         } else {
             std::cerr << "Invalid argument: " << argv[i] << std::endl;
             return -1;
         }
-    }
-
-    if (plyPath.empty()) {
-        std::cerr << "No path to .ply file given" << std::endl;
-        return -1;
     }
 
     // Camera
@@ -317,14 +368,14 @@ int main(int argc, char **argv) {
     ImGui::FileBrowser fileBrowser;
     fileBrowser.SetTitle("Select Point Cloud");
     fileBrowser.SetTypeFilters({".ply"});
+    
+    ImGui::FileBrowser fileSaveBrowser(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
+    fileSaveBrowser.SetTitle("Save Reconstructed Mesh");
+    fileSaveBrowser.SetTypeFilters({".ply"});
 
     // Create renderer
     renderer = std::make_unique<GlPointsRenderer>(camera, rendererParams);
     renderer->setWindowDimensions(windowData.width, windowData.height);
-
-    // Load ply file
-    std::filesystem::path path = getExecutableDirectory() / plyPath;
-    loadPointCloud(path.string());
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
@@ -333,7 +384,7 @@ int main(int argc, char **argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        RenderUI(fileBrowser);
+        RenderUI(fileBrowser, fileSaveBrowser);
         fileBrowser.Display();
         if (fileBrowser.HasSelected()) {
             std::cout << "Selected point cloud: " << fileBrowser.GetSelected().string() << std::endl;
@@ -341,10 +392,19 @@ int main(int argc, char **argv) {
 
             fileBrowser.ClearSelected();
         }
+        fileSaveBrowser.Display();
+        if (fileSaveBrowser.HasSelected()) {
+            std::cout << "Exported mesh: " << fileSaveBrowser.GetSelected().string() << std::endl;
+            exportMesh(fileSaveBrowser.GetSelected().string());
+
+            fileSaveBrowser.ClearSelected();
+        }
 
         // Draw point cloud
-        renderer->setWindowDimensions(windowData.width, windowData.height);
-        pointsRendered = renderer->draw();
+        if (isPointCloudSelected) {
+            renderer->setWindowDimensions(windowData.width, windowData.height);
+            pointsRendered = renderer->draw();
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
