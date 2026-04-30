@@ -23,6 +23,7 @@ set(SOURCES
     ${SRC_PATH}/triangle_mesh_renderer.cpp
     ${SRC_PATH}/poisson_reconstruction_renderer.cpp
     ${SRC_PATH}/octree_builder.cpp
+    ${SRC_PATH}/rolling_ball_renderer.cpp
 )
 
 # executable header files
@@ -37,6 +38,7 @@ set(HEADERS
     ${INCLUDES_PATH}/triangle_mesh_renderer.h
     ${INCLUDES_PATH}/poisson_reconstruction_renderer.h
     ${INCLUDES_PATH}/octree_builder.h
+    ${INCLUDES_PATH}/rolling_ball_renderer.h
 )
 
 # executable glsl shaders
@@ -103,7 +105,7 @@ add_subdirectory(${LIBS_PATH}/glm)
 target_include_directories(${EXECUTABLE_NAME} PUBLIC ${LIBS_PATH}/happly)
 
 # cgal
-find_package(CGAL REQUIRED)
+find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(Eigen3 REQUIRED)
 
 # executable dependencies
