@@ -25,13 +25,14 @@
 #include "poisson_reconstruction_renderer.h"
 #include "octree_builder.h"
 #include "rolling_ball_renderer.h"
+#include "neural_kernel_renderer.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
 constexpr float MOVE_SPEED = 0.005f;
 constexpr float ROTATE_SPEED = 0.4f;
 
-enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON, ROLLING_BALL };
+enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON, ROLLING_BALL , NEURAL_KERNEL};
 int renderAlgorithm = SIMPLE_POINTS;
 
 struct WindowData {
@@ -152,6 +153,13 @@ void updateRenderer() {
             rbRenderer->setPointCloud(pointCloudPath);
             rbRenderer->reconstruct();
         }
+    } else if (renderAlgorithm == NEURAL_KERNEL) {
+        renderer = std::make_unique<NeuralKernelRenderer>(camera, rendererParams);
+        renderer->initialize();
+        if (octree) {
+            std::cout << "Switching to Neural Kernel Reconstruction..." << std::endl;
+            renderer->setPointCloud(octree);
+        }
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
@@ -171,7 +179,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 
         if (isPointCloudSelected) {
             ImGui::Text("Algorithm");
-            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson", "Rolling Ball"};
+            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson", "Rolling Ball", "Neural Kernel Surface"};
             if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
                 updateRenderer();
             }
@@ -252,7 +260,7 @@ int main(int argc, char **argv) {
 
     // 3. Set Version (3070 Ti loves 4.5)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // 4. Create Window
