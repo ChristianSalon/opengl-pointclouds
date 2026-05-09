@@ -23,11 +23,33 @@
 #include <CGAL/mst_orient_normals.h>
 #include <CGAL/poisson_surface_reconstruction.h>
 #include <CGAL/remove_outliers.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
 #include "path_utils.h"
 #include "triangle_mesh_renderer.h"
 
 class PoissonReconstructionRenderer : public TriangleMeshRenderer {
+public:
+    struct PoissonParams {
+        bool removeOutliers = true;
+        float outlierThreshold = 5.0f;
+        int outlierNeighbors = 24;
+
+        bool simplify = false;
+        float simplifyRatio = 2.0f;
+        int simplifyNeighbors = 24;
+
+        bool smooth = true;
+        int smoothNeighbors = 24;
+
+        bool estimateNormals = true;
+        int estimateNormalNeighbors = 24;
+
+        bool fillHoles = false;
+        int maxHoleEdges = 100;
+        float maxHoleDiameter = 0.5f;
+    };
+
 private:
     typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
     typedef Kernel::FT FT;
@@ -39,11 +61,16 @@ private:
     typedef Mesh::Vertex_index vertex_descriptor;
 
 protected:
+    std::shared_ptr<PoissonParams> mPoissonParams;
+
+    Point_set mOriginalPoints;
     Point_set mPoints;
 
 public:
-    PoissonReconstructionRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params)
-        : TriangleMeshRenderer{camera, params} {}
+    PoissonReconstructionRenderer(std::shared_ptr<PerspectiveCamera> camera,
+                                  std::shared_ptr<Params> params,
+                                  std::shared_ptr<PoissonParams> poissonParams)
+        : TriangleMeshRenderer{camera, params}, mPoissonParams{poissonParams} {}
     virtual ~PoissonReconstructionRenderer() {}
 
     virtual void setPointCloud(const std::string &path) override;

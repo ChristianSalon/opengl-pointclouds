@@ -46,6 +46,7 @@ WindowData windowData{};
 
 std::unique_ptr<Renderer> renderer = nullptr;
 std::shared_ptr<Renderer::Params> rendererParams = std::make_shared<Renderer::Params>();
+std::shared_ptr<PoissonReconstructionRenderer::PoissonParams> poissonRendererParams = std::make_shared<PoissonReconstructionRenderer::PoissonParams>();
 size_t pointsRendered;
 
 std::shared_ptr<OctreeBuilder::OctreeNode> octree = nullptr;
@@ -64,8 +65,6 @@ void loadPointCloud(std::string path) {
         // Let CGAL handle loading
         if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
             poissonRenderer->setPointCloud(path);
-            poissonRenderer->reconstruct();
-
             hasColor = poissonRenderer->hasColor();
         }
     } else {
@@ -138,11 +137,10 @@ void updateRenderer() {
             meshRenderer->setPointCloud(pointCloudPath);
         }
     } else if (renderAlgorithm == POISSON) {
-        renderer = std::make_unique<PoissonReconstructionRenderer>(camera, rendererParams);
+        renderer = std::make_unique<PoissonReconstructionRenderer>(camera, rendererParams, poissonRendererParams);
         if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
             poissonRenderer->initialize();
             poissonRenderer->setPointCloud(pointCloudPath);
-            poissonRenderer->reconstruct();
         }
     }
 
@@ -211,12 +209,42 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
             ImGui::Checkbox("Enable EDL", &(rendererParams->enableEdl));
         }
 
-        if (ImGui::CollapsingHeader("3. Reconstruction Settings", ImGuiTreeNodeFlags_DefaultOpen)) {            
+        if (ImGui::CollapsingHeader("3. Poisson Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Remove Outliers");
+            ImGui::Checkbox("##removeOutliers", &poissonRendererParams->removeOutliers);
+            ImGui::Text("Outlier Threshold %");
+            ImGui::SliderFloat("##outlierThreshold", &poissonRendererParams->outlierThreshold, 1.0f, 20.0f);
+            ImGui::Text("Outlier Neighbors");
+            ImGui::SliderInt("##outlierNeighbors", &poissonRendererParams->outlierNeighbors, 1, 50);
+            
+            ImGui::Text("Simplify");
+            ImGui::Checkbox("##simplify", &poissonRendererParams->simplify);
+            ImGui::Text("Simplification Ratio");
+            ImGui::SliderFloat("##simplificationRatio", &poissonRendererParams->simplifyRatio, 0.5f, 5.0f);
+            ImGui::Text("Simplification Heighbors");
+            ImGui::SliderInt("##simplificationNeighbors", &poissonRendererParams->simplifyNeighbors, 1, 50);
+            
+            ImGui::Text("Smoothing");
+            ImGui::Checkbox("##smoothing", &poissonRendererParams->smooth);
+            ImGui::Text("Smoothing Neighbors");
+            ImGui::SliderInt("##smoothingNeighbors", &poissonRendererParams->smoothNeighbors, 1, 50);
+            
+            ImGui::Text("Fill Holes");
+            ImGui::Checkbox("##fillHoles", &poissonRendererParams->fillHoles);
+            ImGui::Text("Max Edges");
+            ImGui::SliderInt("##maxEdges", &poissonRendererParams->maxHoleEdges, 3, 500);
+
+            if (ImGui::Button("Reconstruct Surface", ImVec2(-1, 0))) {
+                if (renderAlgorithm == POISSON) {
+                    if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+                        poissonRenderer->reconstruct();
+                    }
+                }
+            }
+
             if (ImGui::Button("Export Mesh to .ply", ImVec2(-1, 0))) {
                 fileSaveBrowser.Open();
             }
-            
-            ImGui::Text("TODO");
         }
 
         if (ImGui::CollapsingHeader("4. Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -383,6 +411,10 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->Pos);
+        ImGui::SetNextWindowSize(ImVec2(300.0f, viewport->Size.y));
 
         RenderUI(fileBrowser, fileSaveBrowser);
         fileBrowser.Display();

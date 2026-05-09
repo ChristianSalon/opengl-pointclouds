@@ -3,47 +3,92 @@
 void PoissonReconstructionRenderer::reconstruct() {
     mVertices.clear();
     mIndices.clear();
+    mMesh.clear();
 
-    if (mPoints.empty()) {
+    if (mOriginalPoints.empty()) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): Point set is empty");
     }
-    std::cout << "PoissonReconstructionRenderer::reconstruct(): Input points: " << mPoints.size() << std::endl;
+    std::cout << "PoissonReconstructionRenderer::reconstruct(): Input points: " << mOriginalPoints.size() << std::endl;
+    Point_set mPoints = mOriginalPoints;
 
+    // Remove outliers
+    if (mPoissonParams->removeOutliers) {
+        auto removed = CGAL::remove_outliers<CGAL::Sequential_tag>(
+            mPoints, mPoissonParams->outlierNeighbors,
+            mPoints.parameters().threshold_percent(mPoissonParams->outlierThreshold));
+        mPoints.remove(removed, mPoints.end());
+        mPoints.collect_garbage();
+
+        std::cout << "PoissonReconstructionRenderer::reconstruct(): Removed outliers" << std::endl;
+    }
+
+    // Calculate average spacing between points
     double spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(mPoints, 6);
     if (!std::isfinite(spacing) || spacing <= 0.0) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): Invalid spacing");
     }
     std::cout << "PoissonReconstructionRenderer::reconstruct(): Spacing: " << spacing << std::endl;
 
-    CGAL::jet_smooth_point_set<CGAL::Sequential_tag>(mPoints, 24);
-    CGAL::jet_estimate_normals<CGAL::Sequential_tag>(mPoints, 24);
+    // Simplify point cloud
+    if (mPoissonParams->simplify) {
+        auto simplified = CGAL::grid_simplify_point_set(mPoints, mPoissonParams->simplifyRatio * spacing);
+        mPoints.remove(simplified, mPoints.end());
+        mPoints.collect_garbage();
 
-    auto unorientedBegin = CGAL::mst_orient_normals(mPoints, 24);
-    mPoints.remove(unorientedBegin, mPoints.end());
+        std::cout << "PoissonReconstructionRenderer::reconstruct(): Simplified point cloud" << std::endl;
+    }
 
-    mPoints.collect_garbage();
+    // Smooth point cloud
+    if (mPoissonParams->smooth) {
+        CGAL::jet_smooth_point_set<CGAL::Sequential_tag>(mPoints, mPoissonParams->smoothNeighbors);
+        std::cout << "PoissonReconstructionRenderer::reconstruct(): Smoothed point cloud" << std::endl;
+    }
+
+    // Estimate normals
+    if (mPoissonParams->estimateNormals) {
+        CGAL::jet_estimate_normals<CGAL::Sequential_tag>(mPoints, mPoissonParams->estimateNormalNeighbors);
+        auto unorientedBegin = CGAL::mst_orient_normals(mPoints, mPoissonParams->estimateNormalNeighbors);
+        mPoints.remove(unorientedBegin, mPoints.end());
+        mPoints.collect_garbage();
+
+        std::cout << "PoissonReconstructionRenderer::reconstruct(): Estimated normals" << std::endl;
+    }
+
     if (mPoints.empty()) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): All points removed during orientation");
     }
     std::cout << "PoissonReconstructionRenderer::reconstruct(): Points after orientation: " << mPoints.size()
               << std::endl;
 
+    // Poisson surface reconstruction
     bool success = CGAL::poisson_surface_reconstruction_delaunay(mPoints.begin(), mPoints.end(), mPoints.point_map(),
                                                                  mPoints.normal_map(), mMesh, spacing);
     if (!success) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): Poisson reconstruction failed");
     }
 
+    // Check if a mesh was generated
     if (mMesh.number_of_vertices() == 0) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): Reconstructed mesh has no vertices");
     }
     if (mMesh.number_of_faces() == 0) {
         throw std::runtime_error("PoissonReconstructionRenderer::reconstruct(): Reconstructed mesh has no faces");
     }
-
     std::cout << "PoissonReconstructionRenderer::reconstruct(): Mesh vertices: " << mMesh.number_of_vertices()
               << std::endl;
     std::cout << "PoissonReconstructionRenderer::reconstruct(): Mesh faces: " << mMesh.number_of_faces() << std::endl;
+
+    // Hole filling
+    if (mPoissonParams->fillHoles) {
+        std::vector<Mesh::Halfedge_index> borderCycles;
+        CGAL::Polygon_mesh_processing::extract_boundary_cycles(mMesh, std::back_inserter(borderCycles));
+
+        for (Mesh::Halfedge_index h : borderCycles) {
+            CGAL::Polygon_mesh_processing::triangulate_and_refine_hole(mMesh, h);
+        }
+
+        std::cout << "PoissonReconstructionRenderer::reconstruct(): Holes filled: " << borderCycles.size() << std::endl;
+    }
 
     // Get normal map from .ply file
     std::optional<Mesh::Property_map<Mesh::Vertex_index, K::Vector_3>> normalMap =
@@ -93,12 +138,12 @@ void PoissonReconstructionRenderer::setPointCloud(const std::string &path) {
         throw std::runtime_error("PoissonReconstructionRenderer::setPointCloud(): Could not read .ply file " + path);
     }
 
-    stream >> mPoints;
-    if (mPoints.empty()) {
+    stream >> mOriginalPoints;
+    if (mOriginalPoints.empty()) {
         throw std::runtime_error("PoissonReconstructionRenderer::setPointCloud(): Loaded point cloud is empty");
     }
 
-    mHasColor = mPoints.has_property_map<CGAL::IO::Color>("v:color");
+    mHasColor = mOriginalPoints.has_property_map<CGAL::IO::Color>("v:color");
 }
 
 void PoissonReconstructionRenderer::exportMesh(const std::string &path) const {
