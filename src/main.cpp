@@ -24,13 +24,15 @@
 #include "triangle_mesh_renderer.h"
 #include "poisson_reconstruction_renderer.h"
 #include "octree_builder.h"
+#include "rolling_ball_renderer.h"
+#include "neural_kernel_renderer.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
 constexpr float MOVE_SPEED = 0.005f;
 constexpr float ROTATE_SPEED = 0.4f;
 
-enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON };
+enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON, ROLLING_BALL , NEURAL_KERNEL};
 int renderAlgorithm = SIMPLE_POINTS;
 
 struct WindowData {
@@ -142,6 +144,20 @@ void updateRenderer() {
             poissonRenderer->initialize();
             poissonRenderer->setPointCloud(pointCloudPath);
         }
+    } else if (renderAlgorithm == ROLLING_BALL) {
+        renderer = std::make_unique<RollingBallRenderer>(camera, rendererParams);
+        if (auto *rbRenderer = dynamic_cast<RollingBallRenderer *>(renderer.get())) {
+            rbRenderer->initialize();
+            rbRenderer->setPointCloud(pointCloudPath);
+            rbRenderer->reconstruct();
+        }
+    } else if (renderAlgorithm == NEURAL_KERNEL) {
+        renderer = std::make_unique<NeuralKernelRenderer>(camera, rendererParams);
+        renderer->initialize();
+        if (octree) {
+            std::cout << "Switching to Neural Kernel Reconstruction..." << std::endl;
+            renderer->setPointCloud(octree);
+        }
     }
 
     renderer->setWindowDimensions(windowData.width, windowData.height);
@@ -161,7 +177,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 
         if (isPointCloudSelected) {
             ImGui::Text("Algorithm");
-            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson"};
+            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson", "Rolling Ball", "Neural Kernel Surface"};
             if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
                 updateRenderer();
             }
@@ -259,42 +275,45 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 int main(int argc, char **argv) {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
 
-    // Process arguments
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0) {
-            // Show help message
-            std::cout << "./opengl-pointclouds [-h]" << std::endl;
-            std::cout << "-h: Show help message" << std::endl;
-
-            return 0;
-        } else {
-            std::cerr << "Invalid argument: " << argv[i] << std::endl;
-            return -1;
-        }
-    }
-
-    // Camera
-    camera = std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
+    // 1. Setup Camera
+    camera =
+        std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
     windowData.camera = camera;
 
+    // 2. Init GLFW
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
     }
 
+    // 3. Set Version (3070 Ti loves 4.5)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    // 4. Create Window
     GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "opengl-pointclouds", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
-
         return -1;
     }
 
+    // 5. ACTIVATE THE CONTEXT 
     glfwSetWindowUserPointer(window, &windowData);
     glfwMakeContextCurrent(window);
+
+    // 6. NOW Load GLAD 
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        std::cerr << "Failed to initialize GLAD" << std::endl;
+        return -1;
+    }
+
+    // 7. Set Viewport and Callbacks
+    glViewport(0, 0, (int)WINDOW_WIDTH, (int)WINDOW_HEIGHT);
+
+    // ... rest of your callbacks (glfwSetMouseButtonCallback, etc.) follow here ...
+
     glfwSetErrorCallback(
         [](int error, const char *description) -> void { std::cerr << "GLFW error: " << description << std::endl; });
     glfwSetMouseButtonCallback(window, [](GLFWwindow *window, int button, int action, int mods) -> void {
@@ -362,11 +381,6 @@ int main(int argc, char **argv) {
 
         windowData->camera->zoom(yoffset);
     });
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
 
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height) -> void {

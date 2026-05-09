@@ -23,6 +23,8 @@ set(SOURCES
     ${SRC_PATH}/triangle_mesh_renderer.cpp
     ${SRC_PATH}/poisson_reconstruction_renderer.cpp
     ${SRC_PATH}/octree_builder.cpp
+    ${SRC_PATH}/rolling_ball_renderer.cpp
+    ${SRC_PATH}/neural_kernel_renderer.cpp
 )
 
 # executable header files
@@ -37,6 +39,9 @@ set(HEADERS
     ${INCLUDES_PATH}/triangle_mesh_renderer.h
     ${INCLUDES_PATH}/poisson_reconstruction_renderer.h
     ${INCLUDES_PATH}/octree_builder.h
+    ${INCLUDES_PATH}/rolling_ball_renderer.h
+    ${INCLUDES_PATH}/neural_kernel_renderer.h
+    ${INCLUDES_PATH}/marching_cubes_lookup.h
 )
 
 # executable glsl shaders
@@ -59,6 +64,7 @@ set(SHADERS
     ${SHADERS_PATH}/high_quality_quad.frag
     ${SHADERS_PATH}/triangle_mesh.vert
     ${SHADERS_PATH}/triangle_mesh.frag
+    ${SHADERS_PATH}/nks_field.comp
 )
 
 # imgui source files
@@ -103,12 +109,21 @@ add_subdirectory(${LIBS_PATH}/glm)
 target_include_directories(${EXECUTABLE_NAME} PUBLIC ${LIBS_PATH}/happly)
 
 # cgal
-find_package(CGAL REQUIRED)
+find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(Eigen3 REQUIRED)
+
+# OpenMP
+find_package(OpenMP)
+
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found - Multi-core rendering enabled!")
+else()
+    message(WARNING "OpenMP NOT found - Rendering will be slow (Single-core)!")
+endif()
 
 # executable dependencies
 target_include_directories(${EXECUTABLE_NAME} PRIVATE ${INCLUDES_PATH})
-target_link_libraries(${EXECUTABLE_NAME} PRIVATE glad glfw imgui glm::glm CGAL::CGAL Eigen3::Eigen opengl32 gdi32 user32 shell32 kernel32)
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE glad glfw imgui glm::glm CGAL::CGAL Eigen3::Eigen $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX> opengl32 gdi32 user32 shell32 kernel32)
 
 # copy resources to executable directory
 message(STATUS "Copying resources to build directory")

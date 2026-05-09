@@ -1,0 +1,35 @@
+#version 460 core
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+// Buffers for input points and output density field
+layout(std430, binding = 0) buffer PointBuffer { vec4 points[]; };
+layout(std430, binding = 1) buffer FieldBuffer { float field[]; };
+
+uniform int u_PointCount;
+uniform float u_Sigma;
+uniform vec3 u_MinBounds;
+uniform vec3 u_MaxBounds;
+uniform int u_Res;
+
+void main() {
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (id.x >= u_Res || id.y >= u_Res || id.z >= u_Res) return;
+
+    // Calculate 3D world position of this voxel
+    vec3 p = u_MinBounds + (u_MaxBounds - u_MinBounds) * (vec3(id) / float(u_Res - 1));
+    
+    float val = 0.0;
+    float invSigma2 = 1.0 / (2.0 * u_Sigma * u_Sigma);
+
+    // AI Kernel: Check influence of all points on this voxel
+    for (int i = 0; i < u_PointCount; i++) {
+        vec3 diff = p - points[i].xyz;
+        float d2 = dot(diff, diff);
+        if (d2 < u_Sigma * u_Sigma * 10.0) {
+            val += exp(-d2 * invSigma2);
+        }
+    }
+
+    uint index = id.z * u_Res * u_Res + id.y * u_Res + id.x;
+    field[index] = val;
+}
