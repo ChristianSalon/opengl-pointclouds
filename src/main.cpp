@@ -10,10 +10,11 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "imfilebrowser.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+
+#include "imfilebrowser.h"
 
 #include "basic_compute_renderer.h"
 #include "gl_points_renderer.h"
@@ -190,7 +191,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 
         if (isPointCloudSelected) {
             ImGui::Text("Algorithm");
-            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh",
+            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality",         "Triangle Mesh",
                                         "Poisson",   "Rolling Ball",  "Neural Kernel Surface"};
             if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
                 updateRenderer();
