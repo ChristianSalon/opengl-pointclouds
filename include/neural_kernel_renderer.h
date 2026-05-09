@@ -1,6 +1,6 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL  // Fixes the C1189 error from your screenshot
+#define GLM_ENABLE_EXPERIMENTAL
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>

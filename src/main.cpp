@@ -10,29 +10,37 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "imfilebrowser.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "imfilebrowser.h"
 
+#include "basic_compute_renderer.h"
+#include "gl_points_renderer.h"
+#include "high_quality_renderer.h"
+#include "neural_kernel_renderer.h"
+#include "octree_builder.h"
 #include "path_utils.h"
 #include "perspective_camera.h"
-#include "renderer.h"
-#include "gl_points_renderer.h"
-#include "basic_compute_renderer.h"
-#include "high_quality_renderer.h"
-#include "triangle_mesh_renderer.h"
 #include "poisson_reconstruction_renderer.h"
-#include "octree_builder.h"
+#include "renderer.h"
 #include "rolling_ball_renderer.h"
-#include "neural_kernel_renderer.h"
+#include "triangle_mesh_renderer.h"
 
 constexpr float WINDOW_WIDTH = 1024;
 constexpr float WINDOW_HEIGHT = 768;
 constexpr float MOVE_SPEED = 0.005f;
 constexpr float ROTATE_SPEED = 0.4f;
 
-enum RenderAlgorithm { SIMPLE_POINTS, BASIC_COMPUTE, HIGH_QUALITY, TRIANGLE_MESH, POISSON, ROLLING_BALL , NEURAL_KERNEL};
+enum RenderAlgorithm {
+    SIMPLE_POINTS,
+    BASIC_COMPUTE,
+    HIGH_QUALITY,
+    TRIANGLE_MESH,
+    POISSON,
+    ROLLING_BALL,
+    NEURAL_KERNEL
+};
 int renderAlgorithm = SIMPLE_POINTS;
 
 struct WindowData {
@@ -48,7 +56,8 @@ WindowData windowData{};
 
 std::unique_ptr<Renderer> renderer = nullptr;
 std::shared_ptr<Renderer::Params> rendererParams = std::make_shared<Renderer::Params>();
-std::shared_ptr<PoissonReconstructionRenderer::PoissonParams> poissonRendererParams = std::make_shared<PoissonReconstructionRenderer::PoissonParams>();
+std::shared_ptr<PoissonReconstructionRenderer::PoissonParams> poissonRendererParams =
+    std::make_shared<PoissonReconstructionRenderer::PoissonParams>();
 size_t pointsRendered;
 
 std::shared_ptr<OctreeBuilder::OctreeNode> octree = nullptr;
@@ -59,13 +68,14 @@ std::string pointCloudPath = "";
 void loadPointCloud(std::string path) {
     if (renderAlgorithm == TRIANGLE_MESH) {
         // Let CGAL handle loading
-        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer*>(renderer.get())) {
+        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer *>(renderer.get())) {
             meshRenderer->setPointCloud(path);
             hasColor = meshRenderer->hasColor();
         }
     } else if (renderAlgorithm == POISSON) {
         // Let CGAL handle loading
-        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+        if (PoissonReconstructionRenderer *poissonRenderer =
+                dynamic_cast<PoissonReconstructionRenderer *>(renderer.get())) {
             poissonRenderer->setPointCloud(path);
             hasColor = poissonRenderer->hasColor();
         }
@@ -105,7 +115,8 @@ void loadPointCloud(std::string path) {
 
 void exportMesh(std::string path) {
     if (renderAlgorithm == POISSON) {
-        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+        if (PoissonReconstructionRenderer *poissonRenderer =
+                dynamic_cast<PoissonReconstructionRenderer *>(renderer.get())) {
             poissonRenderer->exportMesh(path);
         }
     } else {
@@ -116,7 +127,8 @@ void exportMesh(std::string path) {
 void updateRenderer() {
     static int lastAlgorithm = SIMPLE_POINTS;
 
-    if (renderAlgorithm == lastAlgorithm) return;
+    if (renderAlgorithm == lastAlgorithm)
+        return;
 
     glFinish();
 
@@ -134,13 +146,14 @@ void updateRenderer() {
         renderer->setPointCloud(octree);
     } else if (renderAlgorithm == TRIANGLE_MESH) {
         renderer = std::make_unique<TriangleMeshRenderer>(camera, rendererParams);
-        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer*>(renderer.get())) {
+        if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer *>(renderer.get())) {
             meshRenderer->initialize();
             meshRenderer->setPointCloud(pointCloudPath);
         }
     } else if (renderAlgorithm == POISSON) {
         renderer = std::make_unique<PoissonReconstructionRenderer>(camera, rendererParams, poissonRendererParams);
-        if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+        if (PoissonReconstructionRenderer *poissonRenderer =
+                dynamic_cast<PoissonReconstructionRenderer *>(renderer.get())) {
             poissonRenderer->initialize();
             poissonRenderer->setPointCloud(pointCloudPath);
         }
@@ -177,11 +190,12 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 
         if (isPointCloudSelected) {
             ImGui::Text("Algorithm");
-            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh", "Poisson", "Rolling Ball", "Neural Kernel Surface"};
+            const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality", "Triangle Mesh",
+                                        "Poisson",   "Rolling Ball",  "Neural Kernel Surface"};
             if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
                 updateRenderer();
             }
-        
+
             ImGui::Text("Point Color");
             ImGui::ColorEdit3("##pointColor", glm::value_ptr(rendererParams->pointColor));
 
@@ -232,19 +246,19 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
             ImGui::SliderFloat("##outlierThreshold", &poissonRendererParams->outlierThreshold, 1.0f, 20.0f);
             ImGui::Text("Outlier Neighbors");
             ImGui::SliderInt("##outlierNeighbors", &poissonRendererParams->outlierNeighbors, 1, 50);
-            
+
             ImGui::Text("Simplify");
             ImGui::Checkbox("##simplify", &poissonRendererParams->simplify);
             ImGui::Text("Simplification Ratio");
             ImGui::SliderFloat("##simplificationRatio", &poissonRendererParams->simplifyRatio, 0.5f, 5.0f);
             ImGui::Text("Simplification Heighbors");
             ImGui::SliderInt("##simplificationNeighbors", &poissonRendererParams->simplifyNeighbors, 1, 50);
-            
+
             ImGui::Text("Smoothing");
             ImGui::Checkbox("##smoothing", &poissonRendererParams->smooth);
             ImGui::Text("Smoothing Neighbors");
             ImGui::SliderInt("##smoothingNeighbors", &poissonRendererParams->smoothNeighbors, 1, 50);
-            
+
             ImGui::Text("Fill Holes");
             ImGui::Checkbox("##fillHoles", &poissonRendererParams->fillHoles);
             ImGui::Text("Max Edges");
@@ -252,7 +266,8 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 
             if (ImGui::Button("Reconstruct Surface", ImVec2(-1, 0))) {
                 if (renderAlgorithm == POISSON) {
-                    if (PoissonReconstructionRenderer *poissonRenderer = dynamic_cast<PoissonReconstructionRenderer*>(renderer.get())) {
+                    if (PoissonReconstructionRenderer *poissonRenderer =
+                            dynamic_cast<PoissonReconstructionRenderer *>(renderer.get())) {
                         poissonRenderer->reconstruct();
                     }
                 }
@@ -275,23 +290,22 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
 int main(int argc, char **argv) {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
 
-    // 1. Setup Camera
+    // Setup Camera
     camera =
         std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
     windowData.camera = camera;
 
-    // 2. Init GLFW
+    // Init GLFW
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
     }
 
-    // 3. Set Version (3070 Ti loves 4.5)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // 4. Create Window
+    // Create Window
     GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "opengl-pointclouds", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
@@ -299,20 +313,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // 5. ACTIVATE THE CONTEXT 
     glfwSetWindowUserPointer(window, &windowData);
     glfwMakeContextCurrent(window);
 
-    // 6. NOW Load GLAD 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
-    // 7. Set Viewport and Callbacks
     glViewport(0, 0, (int)WINDOW_WIDTH, (int)WINDOW_HEIGHT);
-
-    // ... rest of your callbacks (glfwSetMouseButtonCallback, etc.) follow here ...
 
     glfwSetErrorCallback(
         [](int error, const char *description) -> void { std::cerr << "GLFW error: " << description << std::endl; });
@@ -410,7 +419,7 @@ int main(int argc, char **argv) {
     ImGui::FileBrowser fileBrowser;
     fileBrowser.SetTitle("Select Point Cloud");
     fileBrowser.SetTypeFilters({".ply"});
-    
+
     ImGui::FileBrowser fileSaveBrowser(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
     fileSaveBrowser.SetTitle("Save Reconstructed Mesh");
     fileSaveBrowser.SetTypeFilters({".ply"});
@@ -426,7 +435,7 @@ int main(int argc, char **argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->Pos);
         ImGui::SetNextWindowSize(ImVec2(300.0f, viewport->Size.y));
 
