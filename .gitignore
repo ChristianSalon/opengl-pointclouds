@@ -43,3 +43,4 @@ build
 
 # debug information files
 *.dwo
+/models/Carla_Serial_best.ckpt
