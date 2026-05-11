@@ -26,6 +26,8 @@ public:
         float shadingFactor = 1.5f;
         float shadingStrength = 1.0f;
         bool enableEdl = true;
+        float rollingBallRadius = 0.05f;
+        bool useStrictRollingBall = false;
     };
 
 protected:
