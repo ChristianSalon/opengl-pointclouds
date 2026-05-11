@@ -35,11 +35,11 @@ private:
     float mThreshold = 0.95f;  // Surface detection level
 
 public:
-    NeuralKernelRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params)
+    NeuralKernelRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params)
         : Renderer{camera, params} {}
 
     virtual void initialize() override;
-    virtual void setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override;
+    virtual BoundingBox setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override;
     virtual size_t draw() override;
     virtual void destroy() override;
 

@@ -32,11 +32,19 @@ void Renderer::setWindowDimensions(int width, int height) {
     mWindowHeight = height;
 }
 
-void Renderer::setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) {
+Renderer::BoundingBox Renderer::setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) {
+    BoundingBox bbox;
+    if (octree) {
+        bbox.center = octree->boundingCube.center;
+        bbox.radius = octree->boundingCube.halfSize;
+    }
+
     mOctree = octree;
 
     glFinish();
 
     destroy();
     initialize();
+
+    return bbox;
 }

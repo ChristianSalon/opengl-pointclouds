@@ -62,7 +62,7 @@ void RollingBallRenderer::reconstruct() {
     std::cout << "[RollingBallRenderer] Finished. Triangles: " << triangles.size() << std::endl;
 }
 
-void RollingBallRenderer::setPointCloud(const std::string &path) {
+Renderer::BoundingBox RollingBallRenderer::setPointCloud(const std::string &path) {
     std::ifstream stream(path, std::ios_base::binary);
     if (!stream) {
         throw std::runtime_error("RollingBallRenderer::setPointCloud(): Could not read .ply file " + path);
@@ -72,4 +72,19 @@ void RollingBallRenderer::setPointCloud(const std::string &path) {
     if (mPoints.empty()) {
         throw std::runtime_error("RollingBallRenderer::setPointCloud(): Point set is empty after loading");
     }
+    
+    auto cgalBbox = CGAL::bbox_3(mPoints.points().begin(), mPoints.points().end());
+    
+    BoundingBox bbox;
+    bbox.center = glm::vec3(
+        (cgalBbox.xmin() + cgalBbox.xmax()) * 0.5f,
+        (cgalBbox.ymin() + cgalBbox.ymax()) * 0.5f,
+        (cgalBbox.zmin() + cgalBbox.zmax()) * 0.5f
+    );
+
+    glm::vec3 minP(cgalBbox.xmin(), cgalBbox.ymin(), cgalBbox.zmin());
+    glm::vec3 maxP(cgalBbox.xmax(), cgalBbox.ymax(), cgalBbox.zmax());
+    bbox.radius = glm::distance(minP, maxP) * 0.5f;
+
+    return bbox;
 }

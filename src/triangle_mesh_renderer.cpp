@@ -77,10 +77,23 @@ size_t TriangleMeshRenderer::draw() {
     return mIndices.size() / 3;
 }
 
-void TriangleMeshRenderer::setPointCloud(const std::string &path) {
+Renderer::BoundingBox TriangleMeshRenderer::setPointCloud(const std::string &path) {
     if (!CGAL::IO::read_PLY(path, mMesh)) {
         throw std::runtime_error("Could not read .ply file " + path);
     }
+
+    auto cgalBbox = CGAL::bbox_3(mMesh.points().begin(), mMesh.points().end());
+    
+    BoundingBox bbox;
+    bbox.center = glm::vec3(
+        (cgalBbox.xmin() + cgalBbox.xmax()) * 0.5f,
+        (cgalBbox.ymin() + cgalBbox.ymax()) * 0.5f,
+        (cgalBbox.zmin() + cgalBbox.zmax()) * 0.5f
+    );
+
+    glm::vec3 minP(cgalBbox.xmin(), cgalBbox.ymin(), cgalBbox.zmin());
+    glm::vec3 maxP(cgalBbox.xmax(), cgalBbox.ymax(), cgalBbox.zmax());
+    bbox.radius = glm::distance(minP, maxP) * 0.5f;
 
     // Get normal map from .ply file
     std::optional<Mesh::Property_map<Mesh::Vertex_index, K::Vector_3>> normalMap =
@@ -123,4 +136,6 @@ void TriangleMeshRenderer::setPointCloud(const std::string &path) {
 
     glNamedBufferData(mVerticesVbo, mVertices.size() * sizeof(Vertex), mVertices.data(), GL_DYNAMIC_DRAW);
     glNamedBufferData(mIndicesVbo, mIndices.size() * sizeof(uint32_t), mIndices.data(), GL_DYNAMIC_DRAW);
+
+    return bbox;
 }

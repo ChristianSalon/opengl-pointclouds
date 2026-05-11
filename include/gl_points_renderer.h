@@ -32,7 +32,7 @@ protected:
     GLint mPointSizeLocation;
 
 public:
-    GlPointsRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
+    GlPointsRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~GlPointsRenderer() {}
 
     virtual void initialize() override;

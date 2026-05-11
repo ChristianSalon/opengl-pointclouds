@@ -22,7 +22,7 @@
 #include "neural_kernel_renderer.h"
 #include "octree_builder.h"
 #include "path_utils.h"
-#include "perspective_camera.h"
+#include "orbit_camera.h"
 #include "poisson_reconstruction_renderer.h"
 #include "renderer.h"
 #include "rolling_ball_renderer.h"
@@ -45,14 +45,15 @@ enum RenderAlgorithm {
 int renderAlgorithm = SIMPLE_POINTS;
 
 struct WindowData {
-    std::shared_ptr<PerspectiveCamera> camera = nullptr;
+    std::shared_ptr<OrbitCamera> camera = nullptr;
     bool leftMousePressed = false;
     bool rightMousePressed = false;
+    bool shiftPressed = false;
     int width = WINDOW_WIDTH;
     int height = WINDOW_HEIGHT;
 };
 
-std::shared_ptr<PerspectiveCamera> camera = nullptr;
+std::shared_ptr<OrbitCamera> camera = nullptr;
 WindowData windowData{};
 
 std::unique_ptr<Renderer> renderer = nullptr;
@@ -67,17 +68,19 @@ bool isPointCloudSelected = false;
 std::string pointCloudPath = "";
 
 void loadPointCloud(std::string path) {
+    Renderer::BoundingBox bbox;
+
     if (renderAlgorithm == TRIANGLE_MESH) {
         // Let CGAL handle loading
         if (TriangleMeshRenderer *meshRenderer = dynamic_cast<TriangleMeshRenderer *>(renderer.get())) {
-            meshRenderer->setPointCloud(path);
+            bbox = meshRenderer->setPointCloud(path);
             hasColor = meshRenderer->hasColor();
         }
     } else if (renderAlgorithm == POISSON) {
         // Let CGAL handle loading
         if (PoissonReconstructionRenderer *poissonRenderer =
                 dynamic_cast<PoissonReconstructionRenderer *>(renderer.get())) {
-            poissonRenderer->setPointCloud(path);
+            bbox = poissonRenderer->setPointCloud(path);
             hasColor = poissonRenderer->hasColor();
         }
     } else {
@@ -107,8 +110,11 @@ void loadPointCloud(std::string path) {
 
         OctreeBuilder octreeBuilder;
         octree = octreeBuilder.build(std::move(vertexPositions), std::move(vertexColors));
-        renderer->setPointCloud(octree);
+        bbox = renderer->setPointCloud(octree);
     }
+
+    camera->setTarget(bbox.center);
+    camera->setDistance(bbox.radius * 2.5f);
 
     pointCloudPath = path;
     isPointCloudSelected = true;
@@ -292,8 +298,8 @@ int main(int argc, char **argv) {
     std::cout << "Starting OpenGL pointclouds demo" << std::endl;
 
     // Setup Camera
-    camera =
-        std::make_shared<PerspectiveCamera>(glm::vec3(0.f, 0.f, 1.f), 80.f, WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 2000.f);
+    camera = std::make_shared<OrbitCamera>(glm::vec3(0.f, 0.f, 0.f), 5.f);
+    camera->setPerspective(80.f, static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
     windowData.camera = camera;
 
     // Init GLFW
@@ -336,6 +342,8 @@ int main(int argc, char **argv) {
             return;
         }
 
+        windowData->shiftPressed = (mods & GLFW_MOD_SHIFT);
+
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             windowData->leftMousePressed = action == GLFW_PRESS;
         }
@@ -367,17 +375,7 @@ int main(int argc, char **argv) {
             return;
         }
 
-        if (windowData->leftMousePressed) {
-            windowData->camera->translate(glm::vec3(-xRel * MOVE_SPEED, yRel * MOVE_SPEED, 0.f));
-        }
-
-        if (windowData->rightMousePressed) {
-            glm::vec3 rot(0.0f);
-            rot.y += xRel * ROTATE_SPEED;
-            rot.x += yRel * ROTATE_SPEED;
-
-            windowData->camera->rotate(rot);
-        }
+        camera->handleMouseInput(xRel, yRel, windowData->leftMousePressed, windowData->shiftPressed);
     });
     glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
         if (ImGui::GetIO().WantCaptureMouse) {

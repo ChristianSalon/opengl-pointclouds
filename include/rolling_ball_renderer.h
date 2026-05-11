@@ -35,12 +35,12 @@ protected:
     Point_set mPoints;
 
 public:
-    RollingBallRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params)
+    RollingBallRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params)
         : TriangleMeshRenderer{camera, params} {}
 
     virtual ~RollingBallRenderer() {}
 
-    void setPointCloud(const std::string &path);
+    BoundingBox setPointCloud(const std::string &path);
     void reconstruct();
 
 };

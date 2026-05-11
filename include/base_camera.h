@@ -56,6 +56,11 @@ public:
     };
 
 protected:
+    float _fov{80.f};           /**< Field of view in the y axis direction in degrees */
+    float _aspectRatio{1.f};    /**< Aspect ratio of camera (x:y) */
+    float _nearPlane{0.1f};     /**< Near clipping plane in pixels */
+    float _farPlane{1000.f};    /**< Far clipping plane in pixels */
+
     glm::vec3 _position{0.f, 0.f, 1.f};
     glm::vec3 _rotation{0.f, 0.f, 0.f};
     glm::vec3 _direction{0.f, 0.f, 1.f};
@@ -70,16 +75,18 @@ protected:
 
 public:
     BaseCamera(glm::vec3 position, glm::vec3 rotation);
+    virtual ~BaseCamera() = default;
 
-    void translate(glm::vec3 translation);
-    void rotate(glm::vec3 rotation);
+    void setPerspective(float fov, float aspect, float near, float far);
+    virtual void zoom(float delta) = 0;
 
-    void setPosition(glm::vec3 position);
-    void setRotation(glm::vec3 rotation);
-    void zoom(float delta);
+    inline glm::mat4 viewMatrix() const { return _viewMatrix; };
+    inline glm::mat4 projectionMatrix() const { return _projectionMatrix; };
 
-    glm::mat4 viewMatrix() const;
-    glm::mat4 projectionMatrix() const;
+    inline float fov() const { return _fov; }
+    inline float aspectRatio() const { return _aspectRatio; }
+    inline float getNear() const { return _nearPlane; }
+    inline float getFar() const { return _farPlane; }
 
     inline Frustum frustum() const { return _frustum; }
     inline glm::vec3 position() const { return this->_position; }
@@ -91,4 +98,5 @@ public:
 
 protected:
     virtual void _setViewMatrix();
+    void _updateProjection();
 };
