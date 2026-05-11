@@ -253,6 +253,29 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
             }
         }
 
+         if (ImGui::CollapsingHeader("Gaussian Kernel Surface", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (renderAlgorithm == NEURAL_KERNEL) {
+                if (auto *nkRenderer = dynamic_cast<NeuralKernelRenderer *>(renderer.get())) {
+                    ImGui::Text("Grid Resolution");
+                    ImGui::SliderInt("##nkRes", &nkRenderer->getGridRes(), 32, 512);
+
+                    ImGui::Text("Gaussian Sigma");
+                    ImGui::SliderFloat("##nkSigma", &nkRenderer->getSigma(), 0.0001f, 0.05f, "%.4f");
+
+                    ImGui::Text("Surface Threshold");
+                    ImGui::SliderFloat("##nkThresh", &nkRenderer->getThreshold(), 0.1f, 1.5f);
+
+                    ImGui::Separator();
+
+                    if (ImGui::Button("Run Reconstruction", ImVec2(-1, 0))) {
+                        nkRenderer->reconstructNeuralSurface();
+                    }
+                }
+            } else {
+                ImGui::TextDisabled("Select 'Neural Kernel Surface' algorithm\nto enable these settings.");
+            }
+        }
+
         if (ImGui::CollapsingHeader("3. Poisson Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Remove Outliers");
             ImGui::Checkbox("##removeOutliers", &poissonRendererParams->removeOutliers);
