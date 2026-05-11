@@ -15,7 +15,6 @@ set(SOURCES
     ${SRC_PATH}/main.cpp
     ${SRC_PATH}/path_utils.cpp
     ${SRC_PATH}/base_camera.cpp
-    ${SRC_PATH}/perspective_camera.cpp
     ${SRC_PATH}/renderer.cpp
     ${SRC_PATH}/gl_points_renderer.cpp
     ${SRC_PATH}/basic_compute_renderer.cpp
@@ -31,7 +30,7 @@ set(SOURCES
 set(HEADERS
     ${INCLUDES_PATH}/path_utils.h
     ${INCLUDES_PATH}/base_camera.h
-    ${INCLUDES_PATH}/perspective_camera.h
+    ${INCLUDES_PATH}/orbit_camera.h
     ${INCLUDES_PATH}/renderer.h
     ${INCLUDES_PATH}/gl_points_renderer.h
     ${INCLUDES_PATH}/basic_compute_renderer.h

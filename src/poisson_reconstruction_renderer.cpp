@@ -132,7 +132,7 @@ void PoissonReconstructionRenderer::reconstruct() {
     glNamedBufferData(mIndicesVbo, mIndices.size() * sizeof(uint32_t), mIndices.data(), GL_DYNAMIC_DRAW);
 }
 
-void PoissonReconstructionRenderer::setPointCloud(const std::string &path) {
+Renderer::BoundingBox PoissonReconstructionRenderer::setPointCloud(const std::string &path) {
     std::ifstream stream(path, std::ios_base::binary);
     if (!stream) {
         throw std::runtime_error("PoissonReconstructionRenderer::setPointCloud(): Could not read .ply file " + path);
@@ -144,6 +144,21 @@ void PoissonReconstructionRenderer::setPointCloud(const std::string &path) {
     }
 
     mHasColor = mOriginalPoints.has_property_map<CGAL::IO::Color>("v:color");
+    
+    auto cgalBbox = CGAL::bbox_3(mOriginalPoints.points().begin(), mOriginalPoints.points().end());
+    
+    BoundingBox bbox;
+    bbox.center = glm::vec3(
+        (cgalBbox.xmin() + cgalBbox.xmax()) * 0.5f,
+        (cgalBbox.ymin() + cgalBbox.ymax()) * 0.5f,
+        (cgalBbox.zmin() + cgalBbox.zmax()) * 0.5f
+    );
+
+    glm::vec3 minP(cgalBbox.xmin(), cgalBbox.ymin(), cgalBbox.zmin());
+    glm::vec3 maxP(cgalBbox.xmax(), cgalBbox.ymax(), cgalBbox.zmax());
+    bbox.radius = glm::distance(minP, maxP) * 0.5f;
+
+    return bbox;
 }
 
 void PoissonReconstructionRenderer::exportMesh(const std::string &path) const {

@@ -67,19 +67,19 @@ protected:
     Point_set mPoints;
 
 public:
-    PoissonReconstructionRenderer(std::shared_ptr<PerspectiveCamera> camera,
+    PoissonReconstructionRenderer(std::shared_ptr<OrbitCamera> camera,
                                   std::shared_ptr<Params> params,
                                   std::shared_ptr<PoissonParams> poissonParams)
         : TriangleMeshRenderer{camera, params}, mPoissonParams{poissonParams} {}
     virtual ~PoissonReconstructionRenderer() {}
 
-    virtual void setPointCloud(const std::string &path) override;
+    virtual BoundingBox setPointCloud(const std::string &path) override;
 
     virtual void reconstruct();
     virtual void exportMesh(const std::string &path) const;
 
     bool hasColor() const { return mHasColor; }
-    virtual void setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override {
+    virtual BoundingBox setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override {
         throw std::runtime_error("PoissonReconstructionRenderer::setPointCloud(octree) not supported");
     };
 };

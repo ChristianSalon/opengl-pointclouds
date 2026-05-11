@@ -46,7 +46,7 @@ protected:
     bool mHasColor{false};
 
 public:
-    TriangleMeshRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params)
+    TriangleMeshRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params)
         : Renderer{camera, params} {}
     virtual ~TriangleMeshRenderer() {}
 
@@ -54,10 +54,10 @@ public:
     virtual void destroy() override;
     virtual size_t draw() override;
 
-    virtual void setPointCloud(const std::string &path);
+    virtual BoundingBox setPointCloud(const std::string &path);
 
     bool hasColor() const { return mHasColor; }
-    virtual void setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override {
+    virtual BoundingBox setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) override {
         throw std::runtime_error("TriangleMeshRenderer::setPointCloud(octree) not supported");
     };
 };

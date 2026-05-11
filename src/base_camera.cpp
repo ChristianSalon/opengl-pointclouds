@@ -1,97 +1,17 @@
-/**
- * @file base_camera.cpp
- * @author Christian Saloň
- */
-
 #include "base_camera.h"
 
-/**
- * @brief BaseCamera constructor
- *
- * @param position Camera position
- * @param rotation Camera rotation
- */
 BaseCamera::BaseCamera(glm::vec3 position, glm::vec3 rotation) : _position{position}, _rotation{rotation} {
-    this->_setViewMatrix();
+    _updateProjection();
 }
 
-/**
- * @brief Translates the camera position
- *
- * @param translation Translation vector (delta)
- */
-void BaseCamera::translate(glm::vec3 translation) {
-    this->_position += this->_right * translation.x;
-    this->_position += this->_up * translation.y;
-    this->_position += this->_direction * translation.z;
-
-    this->_setViewMatrix();
+void BaseCamera::setPerspective(float fov, float aspect, float near, float far) {
+    _fov = fov;
+    _aspectRatio = aspect;
+    _nearPlane = near;
+    _farPlane = far;
+    _updateProjection();
 }
 
-/**
- * @brief Rotates camera
- *
- * @param rotation Rotation vector (delta)
- */
-void BaseCamera::rotate(glm::vec3 rotation) {
-    this->_rotation += rotation;
-
-    this->_setViewMatrix();
-}
-
-/**
- * @brief Zooms the camera based on camera direction
- *
- * @param delta By how much to zoom
- */
-void BaseCamera::zoom(float delta) {
-    static const float zoomFactor = 0.4;
-
-    this->_position += this->_direction * delta * zoomFactor;
-    this->_setViewMatrix();
-}
-
-/**
- * @brief Set new camera position
- *
- * @param position New position
- */
-void BaseCamera::setPosition(glm::vec3 position) {
-    this->_position = position;
-    this->_setViewMatrix();
-}
-
-/**
- * @brief Set new camera rotation
- *
- * @param rotation New rotation
- */
-void BaseCamera::setRotation(glm::vec3 rotation) {
-    this->_rotation = rotation;
-    this->_setViewMatrix();
-}
-
-/**
- * @brief Get view matrix based on camera properties
- *
- * @return View matrix
- */
-glm::mat4 BaseCamera::viewMatrix() const {
-    return this->_viewMatrix;
-}
-
-/**
- * @brief Get projection matrix based on camera properties
- *
- * @return Projection matrix
- */
-glm::mat4 BaseCamera::projectionMatrix() const {
-    return this->_projectionMatrix;
-}
-
-/**
- * @brief Update view matrix after changing camera properties
- */
 void BaseCamera::_setViewMatrix() {
     glm::mat4 rotationMatrix = glm::rotate(glm::mat4{1.f}, glm::radians(this->_rotation.x), glm::vec3{1.f, 0.f, 0.f}) *
                                glm::rotate(glm::mat4{1.f}, glm::radians(this->_rotation.y), glm::vec3{0.f, 1.f, 0.f}) *
@@ -103,4 +23,8 @@ void BaseCamera::_setViewMatrix() {
     this->_target = this->_position + this->_direction;
 
     this->_viewMatrix = glm::lookAt(this->_position, this->_target, this->_up);
+}
+
+void BaseCamera::_updateProjection() {
+    _projectionMatrix = glm::perspective(glm::radians(_fov), _aspectRatio, _nearPlane, _farPlane);
 }

@@ -51,7 +51,7 @@ protected:
 
 
 public:
-    BasicComputeRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
+    BasicComputeRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~BasicComputeRenderer() {}
 
     virtual void initialize() override;

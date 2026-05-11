@@ -23,10 +23,15 @@ void NeuralKernelRenderer::initialize() {
     glDeleteShader(cs);
 }
 
-void NeuralKernelRenderer::setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) {
+Renderer::BoundingBox NeuralKernelRenderer::setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree) {
+    BoundingBox bbox;
+
     if (!octree)
-        return;
+        return bbox;
     mRawPoints.clear();
+    
+    bbox.center = octree->boundingCube.center;
+    bbox.radius = octree->boundingCube.halfSize;
 
     // Flatten Octree to get raw points
     std::vector<OctreeBuilder::OctreeNode *> queue = {octree.get()};
@@ -41,6 +46,8 @@ void NeuralKernelRenderer::setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNo
     }
 
     reconstructNeuralSurface();
+
+    return bbox;
 }
 
 void NeuralKernelRenderer::reconstructNeuralSurface() {

@@ -9,7 +9,7 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "perspective_camera.h"
+#include "orbit_camera.h"
 #include "octree_builder.h"
 
 class Renderer {
@@ -30,8 +30,13 @@ public:
         bool useStrictRollingBall = false;
     };
 
+    struct BoundingBox {
+        glm::vec3 center = glm::vec3(0.f, 0.f, 0.f);
+        float radius = 0.f;
+    };
+
 protected:
-    std::shared_ptr<PerspectiveCamera> mCamera;
+    std::shared_ptr<OrbitCamera> mCamera;
     int mWindowWidth{0};
     int mWindowHeight{0};
 
@@ -39,7 +44,7 @@ protected:
     std::shared_ptr <Params> mParams{nullptr};
 
 public:
-    Renderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params) : mCamera{camera}, mParams{params} {}
+    Renderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params) : mCamera{camera}, mParams{params} {}
     virtual ~Renderer() {}
 
     virtual void initialize() = 0;
@@ -48,7 +53,7 @@ public:
 
     virtual void setWindowDimensions(int width, int height);
 
-    virtual void setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree);
+    virtual BoundingBox setPointCloud(std::shared_ptr<OctreeBuilder::OctreeNode> octree);
 
 protected:
     static GLuint createShader(std::filesystem::path path, GLenum type);

@@ -59,7 +59,7 @@ protected:
     GLuint mQuadVao;
 
 public:
-    HighQualityRenderer(std::shared_ptr<PerspectiveCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
+    HighQualityRenderer(std::shared_ptr<OrbitCamera> camera, std::shared_ptr<Params> params) : Renderer{camera, params} {}
     virtual ~HighQualityRenderer() {}
 
     virtual void initialize() override;
