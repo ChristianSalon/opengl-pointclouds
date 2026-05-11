@@ -198,7 +198,7 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
         if (isPointCloudSelected) {
             ImGui::Text("Algorithm");
             const char *algorithms[] = {"GL Points", "Basic Compute", "High Quality",         "Triangle Mesh",
-                                        "Poisson",   "Rolling Ball",  "Neural Kernel Surface"};
+                                        "Poisson",   "Rolling Ball",  "Gaussian Kernel Surface"};
             if (ImGui::Combo("##algorithm", &renderAlgorithm, algorithms, IM_ARRAYSIZE(algorithms))) {
                 updateRenderer();
             }
@@ -244,6 +244,42 @@ void RenderUI(ImGui::FileBrowser &fileBrowser, ImGui::FileBrowser &fileSaveBrows
             ImGui::SliderFloat("##edlShadingStrength", &(rendererParams->shadingStrength), 0.0f, 2.0f);
 
             ImGui::Checkbox("Enable EDL", &(rendererParams->enableEdl));
+        }
+
+         if (ImGui::CollapsingHeader("Rolling Ball Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Strict Radius (R)");
+            if (ImGui::SliderFloat("##rbRadius", &(rendererParams->rollingBallRadius), 0.001f, 0.5f, "%.3f")) {
+            }
+            ImGui::Checkbox("Strict Rolling Ball", &(rendererParams->useStrictRollingBall));
+
+            if (ImGui::Button("Update Surface", ImVec2(-1, 0))) {
+                if (auto *rb = dynamic_cast<RollingBallRenderer *>(renderer.get())) {
+                    rb->reconstruct();
+                }
+            }
+        }
+
+         if (ImGui::CollapsingHeader("Gaussian Kernel Surface", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (renderAlgorithm == NEURAL_KERNEL) {
+                if (auto *nkRenderer = dynamic_cast<NeuralKernelRenderer *>(renderer.get())) {
+                    ImGui::Text("Grid Resolution");
+                    ImGui::SliderInt("##nkRes", &nkRenderer->getGridRes(), 32, 512);
+
+                    ImGui::Text("Gaussian Sigma");
+                    ImGui::SliderFloat("##nkSigma", &nkRenderer->getSigma(), 0.0001f, 0.05f, "%.4f");
+
+                    ImGui::Text("Surface Threshold");
+                    ImGui::SliderFloat("##nkThresh", &nkRenderer->getThreshold(), 0.1f, 1.5f);
+
+                    ImGui::Separator();
+
+                    if (ImGui::Button("Run Reconstruction", ImVec2(-1, 0))) {
+                        nkRenderer->reconstructNeuralSurface();
+                    }
+                }
+            } else {
+                ImGui::TextDisabled("Select 'Neural Kernel Surface' algorithm\nto enable these settings.");
+            }
         }
 
         if (ImGui::CollapsingHeader("3. Poisson Settings", ImGuiTreeNodeFlags_DefaultOpen)) {

@@ -43,8 +43,13 @@ public:
     virtual size_t draw() override;
     virtual void destroy() override;
 
-private:
+    int &getGridRes() { return mGridRes; }
+    float &getSigma() { return mSigma; }
+    float &getThreshold() { return mThreshold; }
+
     void reconstructNeuralSurface();
+
+private:
     void setupBuffers();
     GLuint mComputeProgram{0};
     GLuint mPointSsbo{0};  // Input to GPU
